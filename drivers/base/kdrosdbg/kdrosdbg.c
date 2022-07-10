@@ -66,6 +66,7 @@ ULONG  SerialPortNumber;
 CPPORT SerialPortInfo;
 
 static ULONG KdpBufferSize = 0;
+static CHAR KdpDebugBufferStatic[4096];
 static PCHAR KdpDebugBuffer = NULL;
 static volatile ULONG KdpCurrentPosition = 0;
 static volatile ULONG KdpFreeBytes = 0;
@@ -587,6 +588,8 @@ KdpFileInit(ULONG BootPhase)
 
     if (BootPhase == 0)
     {
+        KdpDebugBuffer = KdpDebugBufferStatic;
+        KdpFreeBytes = KdpBufferSize = sizeof(KdpDebugBufferStatic);
     }
     else if (BootPhase == 1)
     {
@@ -605,7 +608,7 @@ KdpFileInit(ULONG BootPhase)
 
         HalDisplayString("\r\n   File log debugging enabled\r\n\r\n");
     }
-    else if (BootPhase == 3 && !KdpDebugBuffer)
+    else if (BootPhase == 3 && KdpDebugBuffer != KdpDebugBufferStatic)
     {
         /* Setup the log name */
         Status = RtlAnsiStringToUnicodeString(&FileName, &KdpLogFileName, TRUE);
