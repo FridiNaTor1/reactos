@@ -3,9 +3,6 @@
 
 /* TYPES *********************************************************************/
 
-/* from kdb.c */
-typedef CONTEXT KDB_KTRAP_FRAME, *PKDB_KTRAP_FRAME;
-
 typedef enum _KDB_BREAKPOINT_TYPE
 {
    KdbBreakPointNone = 0,
@@ -118,7 +115,7 @@ KdbpGetHexNumber(
 BOOLEAN
 KdbpRpnEvaluateExpression(
    IN  PCHAR Expression,
-   IN  PKDB_KTRAP_FRAME TrapFrame,
+   IN  PCONTEXT Context,
    OUT PULONGLONG Result,
    OUT PLONG ErrOffset  OPTIONAL,
    OUT PCHAR ErrMsg  OPTIONAL);
@@ -132,7 +129,7 @@ KdbpRpnParseExpression(
 BOOLEAN
 KdbpRpnEvaluateParsedExpression(
    IN  PVOID Expression,
-   IN  PKDB_KTRAP_FRAME TrapFrame,
+   IN  PCONTEXT Context,
    OUT PULONGLONG Result,
    OUT PLONG ErrOffset  OPTIONAL,
    OUT PCHAR ErrMsg  OPTIONAL);
@@ -163,7 +160,7 @@ extern PETHREAD KdbCurrentThread;
 extern LONG KdbLastBreakPointNr;
 extern ULONG KdbNumSingleSteps;
 extern BOOLEAN KdbSingleStepOver;
-extern PKDB_KTRAP_FRAME KdbCurrentTrapFrame;
+extern PCONTEXT KdbCurrentContext;
 extern ULONG KdbDebugState;
 
 LONG

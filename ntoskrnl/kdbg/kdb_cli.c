@@ -420,7 +420,7 @@ KdbpEvaluateExpression(
     PCHAR ErrMsg = ErrMsgBuffer;
     BOOLEAN Ok;
 
-    Ok = KdbpRpnEvaluateExpression(Expression, KdbCurrentTrapFrame, Result,
+    Ok = KdbpRpnEvaluateExpression(Expression, KdbCurrentContext, Result,
                                    &ExpressionErrOffset, ErrMsgBuffer + 2);
     if (!Ok)
     {
@@ -797,7 +797,7 @@ KdbpCmdDisassembleX(
     ULONG ul;
     INT i;
     ULONGLONG Result = 0;
-    ULONG_PTR Address = KeGetContextPc(KdbCurrentTrapFrame);
+    ULONG_PTR Address = KeGetContextPc(KdbCurrentContext);
     LONG InstLen;
 
     if (Argv[0][0] == 'x') /* display memory */
@@ -914,7 +914,7 @@ KdbpCmdRegs(
     ULONG Argc,
     PCHAR Argv[])
 {
-    PCONTEXT Context = KdbCurrentTrapFrame;
+    PCONTEXT Context = KdbCurrentContext;
     INT i;
     static const PCHAR EflagsBits[32] = { " CF", NULL, " PF", " BIT3", " AF", " BIT5",
                                           " ZF", " SF", " TF", " IF", " DF", " OF",
@@ -1182,7 +1182,7 @@ KdbpCmdBackTrace(
     ULONG Argc,
     PCHAR Argv[])
 {
-    CONTEXT Context = *KdbCurrentTrapFrame;
+    CONTEXT Context = *KdbCurrentContext;
 
     /* Walk through the frames */
     KdbpPrint("Frames:\n");
@@ -1217,7 +1217,7 @@ KdbpCmdBackTrace(
 {
     ULONG ul;
     ULONGLONG Result = 0;
-    CONTEXT Context = *KdbCurrentTrapFrame;
+    CONTEXT Context = *KdbCurrentContext;
     ULONG_PTR Frame = KeGetContextFrameRegister(&Context);
     ULONG_PTR Address;
 
@@ -3041,13 +3041,13 @@ KdbpCliMainLoop(
 
     if (EnteredOnSingleStep)
     {
-        if (!KdbSymPrintAddress((PVOID)KeGetContextPc(KdbCurrentTrapFrame), KdbCurrentTrapFrame))
+        if (!KdbSymPrintAddress((PVOID)KeGetContextPc(KdbCurrentContext), KdbCurrentContext))
         {
-            KdbpPrint("<%p>", KeGetContextPc(KdbCurrentTrapFrame));
+            KdbpPrint("<%p>", KeGetContextPc(KdbCurrentContext));
         }
 
         KdbpPrint(": ");
-        if (KdbpDisassemble(KeGetContextPc(KdbCurrentTrapFrame), KdbUseIntelSyntax) < 0)
+        if (KdbpDisassemble(KeGetContextPc(KdbCurrentContext), KdbUseIntelSyntax) < 0)
         {
             KdbpPrint("<INVALID>");
         }

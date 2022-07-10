@@ -109,48 +109,48 @@ static const struct
     UCHAR Offset;
     UCHAR Size;
 }
-RegisterToTrapFrame[] =
+RegisterToContext[] =
 {
     /* FIXME: X86 only */
 #ifdef _M_IX86
-    {"eip",     FIELD_OFFSET(KDB_KTRAP_FRAME, Eip),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Eip)},
+    {"eip",     FIELD_OFFSET(CONTEXT, Eip),     RTL_FIELD_SIZE(CONTEXT, Eip)},
 #else
-    {"rip",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rip),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rip)},
+    {"rip",     FIELD_OFFSET(CONTEXT, Rip),     RTL_FIELD_SIZE(CONTEXT, Rip)},
 #endif
-    {"eflags",  FIELD_OFFSET(KDB_KTRAP_FRAME, EFlags),  RTL_FIELD_SIZE(KDB_KTRAP_FRAME, EFlags)},
+    {"eflags",  FIELD_OFFSET(CONTEXT, EFlags),  RTL_FIELD_SIZE(CONTEXT, EFlags)},
 #ifdef _M_IX86
-    {"eax",     FIELD_OFFSET(KDB_KTRAP_FRAME, Eax),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Eax)},
-    {"ebx",     FIELD_OFFSET(KDB_KTRAP_FRAME, Ebx),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Ebx)},
-    {"ecx",     FIELD_OFFSET(KDB_KTRAP_FRAME, Ecx),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Ecx)},
-    {"edx",     FIELD_OFFSET(KDB_KTRAP_FRAME, Edx),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Edx)},
-    {"esi",     FIELD_OFFSET(KDB_KTRAP_FRAME, Esi),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Esi)},
-    {"edi",     FIELD_OFFSET(KDB_KTRAP_FRAME, Edi),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Edi)},
-    {"esp",     FIELD_OFFSET(KDB_KTRAP_FRAME, Esp),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Esp)},
-    {"ebp",     FIELD_OFFSET(KDB_KTRAP_FRAME, Ebp),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Ebp)},
+    {"eax",     FIELD_OFFSET(CONTEXT, Eax),     RTL_FIELD_SIZE(CONTEXT, Eax)},
+    {"ebx",     FIELD_OFFSET(CONTEXT, Ebx),     RTL_FIELD_SIZE(CONTEXT, Ebx)},
+    {"ecx",     FIELD_OFFSET(CONTEXT, Ecx),     RTL_FIELD_SIZE(CONTEXT, Ecx)},
+    {"edx",     FIELD_OFFSET(CONTEXT, Edx),     RTL_FIELD_SIZE(CONTEXT, Edx)},
+    {"esi",     FIELD_OFFSET(CONTEXT, Esi),     RTL_FIELD_SIZE(CONTEXT, Esi)},
+    {"edi",     FIELD_OFFSET(CONTEXT, Edi),     RTL_FIELD_SIZE(CONTEXT, Edi)},
+    {"esp",     FIELD_OFFSET(CONTEXT, Esp),     RTL_FIELD_SIZE(CONTEXT, Esp)},
+    {"ebp",     FIELD_OFFSET(CONTEXT, Ebp),     RTL_FIELD_SIZE(CONTEXT, Ebp)},
 #else
-    {"rax",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rax),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rax)},
-    {"rbx",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rbx),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rbx)},
-    {"rcx",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rcx),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rcx)},
-    {"rdx",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rdx),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rdx)},
-    {"rsi",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rsi),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rsi)},
-    {"rdi",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rdi),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rdi)},
-    {"rsp",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rsp),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rsp)},
-    {"rbp",     FIELD_OFFSET(KDB_KTRAP_FRAME, Rbp),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Rbp)},
+    {"rax",     FIELD_OFFSET(CONTEXT, Rax),     RTL_FIELD_SIZE(CONTEXT, Rax)},
+    {"rbx",     FIELD_OFFSET(CONTEXT, Rbx),     RTL_FIELD_SIZE(CONTEXT, Rbx)},
+    {"rcx",     FIELD_OFFSET(CONTEXT, Rcx),     RTL_FIELD_SIZE(CONTEXT, Rcx)},
+    {"rdx",     FIELD_OFFSET(CONTEXT, Rdx),     RTL_FIELD_SIZE(CONTEXT, Rdx)},
+    {"rsi",     FIELD_OFFSET(CONTEXT, Rsi),     RTL_FIELD_SIZE(CONTEXT, Rsi)},
+    {"rdi",     FIELD_OFFSET(CONTEXT, Rdi),     RTL_FIELD_SIZE(CONTEXT, Rdi)},
+    {"rsp",     FIELD_OFFSET(CONTEXT, Rsp),     RTL_FIELD_SIZE(CONTEXT, Rsp)},
+    {"rbp",     FIELD_OFFSET(CONTEXT, Rbp),     RTL_FIELD_SIZE(CONTEXT, Rbp)},
 #endif
-    {"cs",      FIELD_OFFSET(KDB_KTRAP_FRAME, SegCs),      2 }, /* Use only the lower 2 bytes */
-    {"ds",      FIELD_OFFSET(KDB_KTRAP_FRAME, SegDs),      RTL_FIELD_SIZE(KDB_KTRAP_FRAME, SegDs)},
-    {"es",      FIELD_OFFSET(KDB_KTRAP_FRAME, SegEs),      RTL_FIELD_SIZE(KDB_KTRAP_FRAME, SegEs)},
-    {"fs",      FIELD_OFFSET(KDB_KTRAP_FRAME, SegFs),      RTL_FIELD_SIZE(KDB_KTRAP_FRAME, SegFs)},
-    {"gs",      FIELD_OFFSET(KDB_KTRAP_FRAME, SegGs),      RTL_FIELD_SIZE(KDB_KTRAP_FRAME, SegGs)},
-    {"ss",      FIELD_OFFSET(KDB_KTRAP_FRAME, SegSs),      RTL_FIELD_SIZE(KDB_KTRAP_FRAME, SegSs)},
-    {"dr0",     FIELD_OFFSET(KDB_KTRAP_FRAME, Dr0),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Dr0)},
-    {"dr1",     FIELD_OFFSET(KDB_KTRAP_FRAME, Dr1),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Dr1)},
-    {"dr2",     FIELD_OFFSET(KDB_KTRAP_FRAME, Dr2),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Dr2)},
-    {"dr3",     FIELD_OFFSET(KDB_KTRAP_FRAME, Dr3),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Dr3)},
-    {"dr6",     FIELD_OFFSET(KDB_KTRAP_FRAME, Dr6),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Dr6)},
-    {"dr7",     FIELD_OFFSET(KDB_KTRAP_FRAME, Dr7),     RTL_FIELD_SIZE(KDB_KTRAP_FRAME, Dr7)}
+    {"cs",      FIELD_OFFSET(CONTEXT, SegCs),      2 }, /* Use only the lower 2 bytes */
+    {"ds",      FIELD_OFFSET(CONTEXT, SegDs),      RTL_FIELD_SIZE(CONTEXT, SegDs)},
+    {"es",      FIELD_OFFSET(CONTEXT, SegEs),      RTL_FIELD_SIZE(CONTEXT, SegEs)},
+    {"fs",      FIELD_OFFSET(CONTEXT, SegFs),      RTL_FIELD_SIZE(CONTEXT, SegFs)},
+    {"gs",      FIELD_OFFSET(CONTEXT, SegGs),      RTL_FIELD_SIZE(CONTEXT, SegGs)},
+    {"ss",      FIELD_OFFSET(CONTEXT, SegSs),      RTL_FIELD_SIZE(CONTEXT, SegSs)},
+    {"dr0",     FIELD_OFFSET(CONTEXT, Dr0),     RTL_FIELD_SIZE(CONTEXT, Dr0)},
+    {"dr1",     FIELD_OFFSET(CONTEXT, Dr1),     RTL_FIELD_SIZE(CONTEXT, Dr1)},
+    {"dr2",     FIELD_OFFSET(CONTEXT, Dr2),     RTL_FIELD_SIZE(CONTEXT, Dr2)},
+    {"dr3",     FIELD_OFFSET(CONTEXT, Dr3),     RTL_FIELD_SIZE(CONTEXT, Dr3)},
+    {"dr6",     FIELD_OFFSET(CONTEXT, Dr6),     RTL_FIELD_SIZE(CONTEXT, Dr6)},
+    {"dr7",     FIELD_OFFSET(CONTEXT, Dr7),     RTL_FIELD_SIZE(CONTEXT, Dr7)}
 };
-static const INT RegisterToTrapFrameCount = sizeof (RegisterToTrapFrame) / sizeof (RegisterToTrapFrame[0]);
+static const INT RegisterToContextCount = sizeof (RegisterToContext) / sizeof (RegisterToContext[0]);
 
 /* FUNCTIONS *****************************************************************/
 
@@ -297,7 +297,7 @@ RpnpDumpStack(
                 break;
 
             case RpnOpRegister:
-                KdpDprintf("%s,", RegisterToTrapFrame[Op->Data.Register].Name);
+                KdpDprintf("%s,", RegisterToContext[Op->Data.Register].Name);
                 break;
 
             case RpnOpDereference:
@@ -578,18 +578,18 @@ get_operand:
             }
 
             /* Try to find register */
-            for (i = 0; i < RegisterToTrapFrameCount; i++)
+            for (i = 0; i < RegisterToContextCount; i++)
             {
-                if (stricmp(RegisterToTrapFrame[i].Name, Buffer) == 0)
+                if (stricmp(RegisterToContext[i].Name, Buffer) == 0)
                     break;
             }
 
-            if (i < RegisterToTrapFrameCount)
+            if (i < RegisterToContextCount)
             {
                 RpnOp.Type = RpnOpRegister;
                 RpnOp.CharacterOffset = CharacterOffset;
                 RpnOp.Data.Register = i;
-                i = strlen(RegisterToTrapFrame[i].Name);
+                i = strlen(RegisterToContext[i].Name);
                 CharacterOffset += i;
                 p += i;
             }
@@ -881,7 +881,7 @@ get_operand:
 /*!\brief Evaluates the RPN op stack and returns the result.
  *
  * \param Stack      Pointer to a RPN_STACK structure.
- * \param TrapFrame  Register values.
+ * \param Context    Register values.
  * \param Result     Pointer to an ULONG to store the result into.
  * \param ErrOffset  On failure this is set to the character offset at which the error occoured.
  * \param ErrMsg     Buffer which receives an error message on failure (128 bytes)
@@ -892,7 +892,7 @@ get_operand:
 static BOOLEAN
 RpnpEvaluateStack(
     IN  PRPN_STACK Stack,
-    IN  PKDB_KTRAP_FRAME TrapFrame,
+    IN  PCONTEXT Context,
     OUT PULONGLONG Result,
     OUT PLONG ErrOffset  OPTIONAL,
     OUT PCHAR ErrMsg  OPTIONAL)
@@ -911,7 +911,7 @@ RpnpEvaluateStack(
 #endif
 
     ASSERT(Stack);
-    ASSERT(TrapFrame);
+    ASSERT(Context);
     ASSERT(Result);
 
     for (index = 0; index < Stack->Sp; index++)
@@ -954,9 +954,9 @@ RpnpEvaluateStack(
                 }
 
                 ul = Op->Data.Register;
-                p = (PVOID)((ULONG_PTR)TrapFrame + RegisterToTrapFrame[ul].Offset);
+                p = (PVOID)((ULONG_PTR)Context + RegisterToContext[ul].Offset);
 
-                switch (RegisterToTrapFrame[ul].Size)
+                switch (RegisterToContext[ul].Size)
                 {
                     case 1: ull = (ULONGLONG)(*(PUCHAR)p); break;
                     case 2: ull = (ULONGLONG)(*(PUSHORT)p); break;
@@ -1090,7 +1090,7 @@ RpnpEvaluateStack(
 /*!\brief Evaluates the given expression
  *
  * \param Expression  Expression to evaluate.
- * \param TrapFrame   Register values.
+ * \param Context     Register values.
  * \param Result      Variable which receives the result on success.
  * \param ErrOffset   Variable which receives character offset on parse error (-1 on other errors)
  * \param ErrMsg      Buffer which receives an error message on failure (128 bytes)
@@ -1101,7 +1101,7 @@ RpnpEvaluateStack(
 BOOLEAN
 KdbpRpnEvaluateExpression(
     IN  PCHAR Expression,
-    IN  PKDB_KTRAP_FRAME TrapFrame,
+    IN  PCONTEXT Context,
     OUT PULONGLONG Result,
     OUT PLONG ErrOffset  OPTIONAL,
     OUT PCHAR ErrMsg  OPTIONAL)
@@ -1109,7 +1109,7 @@ KdbpRpnEvaluateExpression(
     PRPN_STACK Stack = (PRPN_STACK)&RpnStack;
 
     ASSERT(Expression);
-    ASSERT(TrapFrame);
+    ASSERT(Context);
     ASSERT(Result);
 
     /* Clear the stack and parse the expression */
@@ -1122,7 +1122,7 @@ KdbpRpnEvaluateExpression(
 #endif
 
     /* Evaluate the stack */
-    if (!RpnpEvaluateStack(Stack, TrapFrame, Result, ErrOffset, ErrMsg))
+    if (!RpnpEvaluateStack(Stack, Context, Result, ErrOffset, ErrMsg))
         return FALSE;
 
     return TRUE;
@@ -1183,7 +1183,7 @@ KdbpRpnParseExpression(
 /*!\brief Evaluates the given expression and returns the result.
  *
  * \param Expression  Expression "handle" returned by KdbpRpnParseExpression.
- * \param TrapFrame   Register values.
+ * \param Context     Register values.
  * \param Result      Variable which receives the result on success.
  * \param ErrOffset   Variable which receives character offset on parse error (-1 on other errors)
  * \param ErrMsg      Buffer which receives an error message on failure (128 bytes)
@@ -1195,7 +1195,7 @@ KdbpRpnParseExpression(
 BOOLEAN
 KdbpRpnEvaluateParsedExpression(
     IN  PVOID Expression,
-    IN  PKDB_KTRAP_FRAME TrapFrame,
+    IN  PCONTEXT Context,
     OUT PULONGLONG Result,
     OUT PLONG ErrOffset  OPTIONAL,
     OUT PCHAR ErrMsg  OPTIONAL)
@@ -1203,10 +1203,10 @@ KdbpRpnEvaluateParsedExpression(
     PRPN_STACK Stack = (PRPN_STACK)Expression;
 
     ASSERT(Expression);
-    ASSERT(TrapFrame);
+    ASSERT(Context);
     ASSERT(Result);
 
     /* Evaluate the stack */
-    return RpnpEvaluateStack(Stack, TrapFrame, Result, ErrOffset, ErrMsg);
+    return RpnpEvaluateStack(Stack, Context, Result, ErrOffset, ErrMsg);
 }
 

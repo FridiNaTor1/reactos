@@ -55,9 +55,9 @@ PEPROCESS KdbCurrentProcess = NULL;  /* The current process context in which KDB
 PEPROCESS KdbOriginalProcess = NULL; /* The process in whichs context KDB was intered */
 PETHREAD KdbCurrentThread = NULL;  /* The current thread context in which KDB runs */
 PETHREAD KdbOriginalThread = NULL; /* The thread in whichs context KDB was entered */
-PKDB_KTRAP_FRAME KdbCurrentTrapFrame = NULL; /* Pointer to the current trapframe */
-static KDB_KTRAP_FRAME KdbTrapFrame = { 0 };  /* The trapframe which was passed to KdbEnterDebuggerException */
-static KDB_KTRAP_FRAME KdbThreadTrapFrame = { 0 }; /* The trapframe of the current thread (KdbCurrentThread) */
+PCONTEXT KdbCurrentContext = NULL; /* Pointer to the current context */
+static CONTEXT KdbContext = { 0 };  /* The context which was passed to KdbEnterDebuggerException */
+static CONTEXT KdbThreadContext = { 0 }; /* The context of the current thread (KdbCurrentThread) */
 static KAPC_STATE KdbApcState;
 extern BOOLEAN KdbpBugCheckRequested;
 
@@ -118,26 +118,26 @@ static const CHAR *ExceptionNrToString[] =
 /* FUNCTIONS *****************************************************************/
 
 static VOID
-KdbpKdbTrapFrameFromKernelStack(
+KdbpKdbContextFromKernelStack(
     PVOID KernelStack,
-    PKDB_KTRAP_FRAME KdbTrapFrame)
+    PCONTEXT KdbContext)
 {
     ULONG_PTR *StackPtr;
 
-    RtlZeroMemory(KdbTrapFrame, sizeof(KDB_KTRAP_FRAME));
+    RtlZeroMemory(KdbContext, sizeof(*KdbContext));
     StackPtr = (ULONG_PTR *) KernelStack;
 #ifdef _M_IX86
-    KdbTrapFrame->Ebp = StackPtr[3];
-    KdbTrapFrame->Edi = StackPtr[4];
-    KdbTrapFrame->Esi = StackPtr[5];
-    KdbTrapFrame->Ebx = StackPtr[6];
-    KdbTrapFrame->Eip = StackPtr[7];
-    KdbTrapFrame->Esp = (ULONG) (StackPtr + 8);
-    KdbTrapFrame->SegSs = KGDT_R0_DATA;
-    KdbTrapFrame->SegCs = KGDT_R0_CODE;
-    KdbTrapFrame->SegDs = KGDT_R0_DATA;
-    KdbTrapFrame->SegEs = KGDT_R0_DATA;
-    KdbTrapFrame->SegGs = KGDT_R0_DATA;
+    KdbContext->Ebp = StackPtr[3];
+    KdbContext->Edi = StackPtr[4];
+    KdbContext->Esi = StackPtr[5];
+    KdbContext->Ebx = StackPtr[6];
+    KdbContext->Eip = StackPtr[7];
+    KdbContext->Esp = (ULONG) (StackPtr + 8);
+    KdbContext->SegSs = KGDT_R0_DATA;
+    KdbContext->SegCs = KGDT_R0_CODE;
+    KdbContext->SegDs = KGDT_R0_DATA;
+    KdbContext->SegEs = KGDT_R0_DATA;
+    KdbContext->SegGs = KGDT_R0_DATA;
 #endif
 
     /* FIXME: what about the other registers??? */
@@ -321,7 +321,7 @@ KdbpStepIntoInstruction(
         IntVect = 3;
     else if (Mem[0] == 0xcd)
         IntVect = Mem[1];
-    else if (Mem[0] == 0xce && KdbCurrentTrapFrame->EFlags & (1<<11)) /* 1 << 11 is the overflow flag */
+    else if (Mem[0] == 0xce && KdbCurrentContext->EFlags & (1<<11)) /* 1 << 11 is the overflow flag */
         IntVect = 4;
     else
         return FALSE;
@@ -643,7 +643,7 @@ KdbpDeleteBreakPoint(
  * the debug exception to happen.
  *
  * \param ExpNr      Exception Number (1 or 3)
- * \param TrapFrame  Exception trapframe
+ * \param Context    Exception context
  *
  * \returns Breakpoint number, -1 on error.
  */
@@ -779,7 +779,7 @@ KdbpEnableBreakPoint(
         ASSERT(KDB_MAXIMUM_HW_BREAKPOINT_COUNT == 4);
         for (i = 0; i < KDB_MAXIMUM_HW_BREAKPOINT_COUNT; i++)
         {
-            if ((KdbTrapFrame.Dr7 & (0x3 << (i * 2))) == 0)
+            if ((KdbContext.Dr7 & (0x3 << (i * 2))) == 0)
                 break;
         }
 
@@ -789,27 +789,27 @@ KdbpEnableBreakPoint(
         switch (i)
         {
             case 0:
-                KdbTrapFrame.Dr0 = BreakPoint->Address;
+                KdbContext.Dr0 = BreakPoint->Address;
                 break;
             case 1:
-                KdbTrapFrame.Dr1 = BreakPoint->Address;
+                KdbContext.Dr1 = BreakPoint->Address;
                 break;
             case 2:
-                KdbTrapFrame.Dr2 = BreakPoint->Address;
+                KdbContext.Dr2 = BreakPoint->Address;
                 break;
             case 3:
-                KdbTrapFrame.Dr3 = BreakPoint->Address;
+                KdbContext.Dr3 = BreakPoint->Address;
                 break;
         }
 
         /* Enable the global breakpoint */
-        KdbTrapFrame.Dr7 |= (0x2 << (i * 2));
+        KdbContext.Dr7 |= (0x2 << (i * 2));
 
         /* Enable the exact match bits. */
-        KdbTrapFrame.Dr7 |= 0x00000300;
+        KdbContext.Dr7 |= 0x00000300;
 
         /* Clear existing state. */
-        KdbTrapFrame.Dr7 &= ~(0xF << (16 + (i * 4)));
+        KdbContext.Dr7 &= ~(0xF << (16 + (i * 4)));
 
         /* Set the breakpoint type. */
         switch (BreakPoint->Data.Hw.AccessType)
@@ -830,20 +830,20 @@ KdbpEnableBreakPoint(
                 break;
         }
 
-        KdbTrapFrame.Dr7 |= (ul << (16 + (i * 4)));
+        KdbContext.Dr7 |= (ul << (16 + (i * 4)));
 
         /* Set the breakpoint length. */
-        KdbTrapFrame.Dr7 |= ((BreakPoint->Data.Hw.Size - 1) << (18 + (i * 4)));
+        KdbContext.Dr7 |= ((BreakPoint->Data.Hw.Size - 1) << (18 + (i * 4)));
 
-        /* Update KdbCurrentTrapFrame - values are taken from there by the CLI */
-        if (&KdbTrapFrame != KdbCurrentTrapFrame)
+        /* Update KdbCurrentContext - values are taken from there by the CLI */
+        if (&KdbContext != KdbCurrentContext)
         {
-            KdbCurrentTrapFrame->Dr0 = KdbTrapFrame.Dr0;
-            KdbCurrentTrapFrame->Dr1 = KdbTrapFrame.Dr1;
-            KdbCurrentTrapFrame->Dr2 = KdbTrapFrame.Dr2;
-            KdbCurrentTrapFrame->Dr3 = KdbTrapFrame.Dr3;
-            KdbCurrentTrapFrame->Dr6 = KdbTrapFrame.Dr6;
-            KdbCurrentTrapFrame->Dr7 = KdbTrapFrame.Dr7;
+            KdbCurrentContext->Dr0 = KdbContext.Dr0;
+            KdbCurrentContext->Dr1 = KdbContext.Dr1;
+            KdbCurrentContext->Dr2 = KdbContext.Dr2;
+            KdbCurrentContext->Dr3 = KdbContext.Dr3;
+            KdbCurrentContext->Dr6 = KdbContext.Dr6;
+            KdbCurrentContext->Dr7 = KdbContext.Dr7;
         }
 
         BreakPoint->Data.Hw.DebugReg = i;
@@ -935,11 +935,11 @@ KdbpDisableBreakPoint(
         ASSERT(BreakPoint->Type == KdbBreakPointHardware);
 
         /* Clear the breakpoint. */
-        KdbTrapFrame.Dr7 &= ~(0x3 << (BreakPoint->Data.Hw.DebugReg * 2));
-        if ((KdbTrapFrame.Dr7 & 0xFF) == 0)
+        KdbContext.Dr7 &= ~(0x3 << (BreakPoint->Data.Hw.DebugReg * 2));
+        if ((KdbContext.Dr7 & 0xFF) == 0)
         {
             /* If no breakpoints are enabled then clear the exact match flags. */
-            KdbTrapFrame.Dr7 &= 0xFFFFFCFF;
+            KdbContext.Dr7 &= 0xFFFFFCFF;
         }
 
         for (i = 0; i < KdbHwBreakPointCount; i++)
@@ -1060,12 +1060,12 @@ KdbpAttachToThread(
     /* Save the current thread's context (if we previously attached to a thread) */
     if (KdbCurrentThread != KdbOriginalThread)
     {
-        ASSERT(KdbCurrentTrapFrame == &KdbThreadTrapFrame);
-        /* Actually, we can't save the context, there's no guarantee that there was a trap frame */
+        ASSERT(KdbCurrentContext == &KdbThreadContext);
+        /* Actually, we can't save the context, there's no guarantee that there was a context */
     }
     else
     {
-        ASSERT(KdbCurrentTrapFrame == &KdbTrapFrame);
+        ASSERT(KdbCurrentContext == &KdbContext);
     }
 
     /* Switch to the thread's context */
@@ -1073,16 +1073,16 @@ KdbpAttachToThread(
     {
         /* The thread we're attaching to isn't the thread on which we entered
          * kdb and so the thread we're attaching to is not running. There
-         * is no guarantee that it actually has a trap frame. So we have to
+         * is no guarantee that it actually has a context. So we have to
          * peek directly at the registers which were saved on the stack when the
          * thread was preempted in the scheduler */
-        KdbpKdbTrapFrameFromKernelStack(Thread->Tcb.KernelStack,
-                                        &KdbThreadTrapFrame);
-        KdbCurrentTrapFrame = &KdbThreadTrapFrame;
+        KdbpKdbContextFromKernelStack(Thread->Tcb.KernelStack,
+                                        &KdbThreadContext);
+        KdbCurrentContext = &KdbThreadContext;
     }
     else /* Switching back to original thread */
     {
-        KdbCurrentTrapFrame = &KdbTrapFrame;
+        KdbCurrentContext = &KdbContext;
     }
     KdbCurrentThread = Thread;
 
@@ -1252,8 +1252,7 @@ KdbpGetExceptionNumberFromStatus(
  *
  * \param ExceptionRecord  Unused.
  * \param PreviousMode     UserMode if the exception was raised from umode, otherwise KernelMode.
- * \param Context          Context, IN/OUT parameter.
- * \param TrapFrame        Exception TrapFrame.
+ * \param Context          Exception Context.
  * \param FirstChance      TRUE when called before exception frames were serached,
  *                         FALSE for the second call.
  *
@@ -1383,11 +1382,11 @@ KdbEnterDebuggerException(
         /* Check if the condition for the breakpoint is met. */
         if (BreakPoint->Condition)
         {
-            /* Setup the KDB trap frame */
-            KdbTrapFrame = *Context;
+            /* Setup the KDB context */
+            KdbContext = *Context;
 
             ull = 0;
-            if (!KdbpRpnEvaluateParsedExpression(BreakPoint->Condition, &KdbTrapFrame, &ull, NULL, NULL))
+            if (!KdbpRpnEvaluateParsedExpression(BreakPoint->Condition, &KdbContext, &ull, NULL, NULL))
             {
                 /* FIXME: Print warning? */
             }
@@ -1527,10 +1526,10 @@ KdbEnterDebuggerException(
     /* Update the current process pointer */
     KdbCurrentProcess = KdbOriginalProcess = PsGetCurrentProcess();
     KdbCurrentThread = KdbOriginalThread = PsGetCurrentThread();
-    KdbCurrentTrapFrame = &KdbTrapFrame;
+    KdbCurrentContext = &KdbContext;
 
-    /* Setup the KDB trap frame */
-    KdbTrapFrame = *Context;
+    /* Setup the KDB context */
+    KdbContext = *Context;
 
     /* Enter critical section */
     OldEflags = __readeflags();
@@ -1557,19 +1556,19 @@ KdbEnterDebuggerException(
         /* Variable explains itself! */
         KdbpEvenThoughWeHaveABreakPointToReenableWeAlsoHaveARealSingleStep = TRUE;
 
-        if ((KdbSingleStepOver && KdbpStepOverInstruction(KeGetContextPc(KdbCurrentTrapFrame))) ||
-            (!KdbSingleStepOver && KdbpStepIntoInstruction(KeGetContextPc(KdbCurrentTrapFrame))))
+        if ((KdbSingleStepOver && KdbpStepOverInstruction(KeGetContextPc(KdbCurrentContext))) ||
+            (!KdbSingleStepOver && KdbpStepIntoInstruction(KeGetContextPc(KdbCurrentContext))))
         {
-            ASSERT((KdbCurrentTrapFrame->EFlags & EFLAGS_TF) == 0);
-            /*KdbCurrentTrapFrame->EFlags &= ~EFLAGS_TF;*/
+            ASSERT((KdbCurrentContext->EFlags & EFLAGS_TF) == 0);
+            /*KdbCurrentContext->EFlags &= ~EFLAGS_TF;*/
         }
         else
         {
-            KdbTrapFrame.EFlags |= EFLAGS_TF;
+            KdbContext.EFlags |= EFLAGS_TF;
         }
     }
 
-    /* We can't update the current thread's trapframe 'cause it might not have one */
+    /* We can't update the current thread's context 'cause it might not have one */
 
     /* Detach from attached process */
     if (KdbCurrentProcess != KdbOriginalProcess)
@@ -1578,7 +1577,7 @@ KdbEnterDebuggerException(
     }
 
     /* Update the exception Context */
-    *Context = KdbTrapFrame;
+    *Context = KdbContext;
 
     /* Decrement the entry count */
     InterlockedDecrement(&KdbEntryCount);
