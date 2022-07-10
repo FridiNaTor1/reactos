@@ -161,7 +161,6 @@ extern LONG KdbLastBreakPointNr;
 extern ULONG KdbNumSingleSteps;
 extern BOOLEAN KdbSingleStepOver;
 extern PCONTEXT KdbCurrentContext;
-extern ULONG KdbDebugState;
 
 LONG
 KdbpGetNextBreakPointNr(
@@ -234,10 +233,6 @@ KdbEnterDebuggerException(IN PEXCEPTION_RECORD64 ExceptionRecord,
                           IN KPROCESSOR_MODE PreviousMode,
                           IN OUT PCONTEXT Context,
                           IN BOOLEAN FirstChance);
-
-KD_CONTINUE_TYPE
-KdbEnterDebuggerFirstChanceException(
-    IN OUT PKTRAP_FRAME TrapFrame);
 
 /* other functions */
 

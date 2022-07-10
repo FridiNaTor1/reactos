@@ -6,19 +6,6 @@
 // Kernel Debugger Port Definition
 //
 
-BOOLEAN
-NTAPI
-KdPortInitializeEx(
-    PCPPORT PortInformation,
-    ULONG ComPortNumber
-);
-
-BOOLEAN
-NTAPI
-KdPortGetByteEx(
-    PCPPORT PortInformation,
-    PUCHAR ByteReceived);
-
 VOID
 NTAPI
 KdPortPutByteEx(
