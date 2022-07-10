@@ -1166,8 +1166,7 @@ KdbpInternalEnter(VOID)
     KbdDisableMouse();
 
     /* Take control of the display */
-    if (KdpDebugMode.Screen)
-        KdpScreenAcquire();
+    KdpScreenAcquire();
 
     /* Call the interface's main loop on a different stack */
     Thread = PsGetCurrentThread();
@@ -1189,8 +1188,7 @@ KdbpInternalEnter(VOID)
     Thread->Tcb.KernelStack = SavedKernelStack;
 
     /* Release the display */
-    if (KdpDebugMode.Screen)
-        KdpScreenRelease();
+    KdpScreenRelease();
 
     KbdEnableMouse();
 }
@@ -1671,7 +1669,6 @@ KdbpGetCommandLineSettings(
         {
             p1 += CONST_STR_LEN("KDSERIAL");
             KdbDebugState |= KD_DEBUG_KDSERIAL;
-            KdpDebugMode.Serial = TRUE;
         }
         else if (!_strnicmp(p1, "KDNOECHO", CONST_STR_LEN("KDNOECHO")))
         {

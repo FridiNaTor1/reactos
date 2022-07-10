@@ -439,14 +439,11 @@ KdbDebugPrint(
 
 /*! \brief Initializes the KDB symbols implementation.
  *
- * \param DispatchTable         Pointer to the KD dispatch table
  * \param BootPhase             Phase of initialization
  */
 VOID
 NTAPI
-KdbInitialize(
-    PKD_DISPATCH_TABLE DispatchTable,
-    ULONG BootPhase)
+KdbInitialize(ULONG BootPhase)
 {
     PCHAR p1, p2;
     SHORT Found = FALSE;
@@ -464,13 +461,6 @@ KdbInitialize(
 
     if (BootPhase == 0)
     {
-        /* Write out the functions that we support for now */
-        DispatchTable->KdpInitRoutine = KdpKdbgInit;
-        DispatchTable->KdpPrintRoutine = KdbDebugPrint;
-
-        /* Register as a Provider */
-        InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
-
         /* Perform actual initialization of symbol module */
         //NtoskrnlModuleObject->PatchInformation = NULL;
         //LdrHalModuleObject->PatchInformation = NULL;
