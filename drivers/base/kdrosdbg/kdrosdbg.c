@@ -35,13 +35,6 @@ const ULONG BaseArray[] = {0, 0xF1012000};
 #error Unknown architecture
 #endif
 
-/* These values MUST be nonzero.  They're used as bit masks. */
-typedef enum _KDB_OUTPUT_SETTINGS
-{
-   KD_DEBUG_KDSERIAL = 1,
-   KD_DEBUG_KDNOECHO = 2
-} KDB_OUTPUT_SETTINGS;
-
 /* KD Private Debug Modes */
 typedef struct _KDP_DEBUG_MODE
 {
@@ -62,6 +55,7 @@ typedef struct _KDP_DEBUG_MODE
 
 ULONG KdbDebugState = 0; /* KDBG Settings (NOECHO, KDSERIAL) */
 KDP_DEBUG_MODE KdpDebugMode;
+STRING KdbPromptString = RTL_CONSTANT_STRING("kdb:> ");
 
 #define KdpScreenLineLengthDefault 80
 static CHAR KdpScreenLineBuffer[KdpScreenLineLengthDefault + 1] = "";
@@ -165,6 +159,135 @@ KdpGetDebugMode(PCHAR Currentp2)
     }
 
     return p2;
+}
+
+/* KEYBOARD FUNCTIONS ********************************************************/
+
+#define KBD_STATUS_REG          0x64
+#define KBD_CNTL_REG            0x64
+#define KBD_DATA_REG            0x60
+
+#define KBD_STAT_OBF            0x01
+#define KBD_STAT_IBF            0x02
+
+#define CTRL_WRITE_MOUSE        0xD4
+#define MOU_ENAB                0xF4
+#define MOU_DISAB               0xF5
+#define MOUSE_ACK               0xFA
+
+#define KBD_DISABLE_MOUSE       0xA7
+#define KBD_ENABLE_MOUSE        0xA8
+
+#define kbd_write_command(cmd)  WRITE_PORT_UCHAR((PUCHAR)KBD_CNTL_REG,cmd)
+#define kbd_write_data(cmd)     WRITE_PORT_UCHAR((PUCHAR)KBD_DATA_REG,cmd)
+#define kbd_read_input()        READ_PORT_UCHAR((PUCHAR)KBD_DATA_REG)
+#define kbd_read_status()       READ_PORT_UCHAR((PUCHAR)KBD_STATUS_REG)
+
+static unsigned char keyb_layout[2][128] =
+{
+    "\000\0331234567890-=\177\t"                                        /* 0x00 - 0x0f */
+    "qwertyuiop[]\r\000as"                                              /* 0x10 - 0x1f */
+    "dfghjkl;'`\000\\zxcv"                                              /* 0x20 - 0x2f */
+    "bnm,./\000*\000 \000\201\202\203\204\205"                          /* 0x30 - 0x3f */
+    "\206\207\210\211\212\000\000789-456+1"                             /* 0x40 - 0x4f */
+    "230\177\000\000\213\214\000\000\000\000\000\000\000\000\000\000"   /* 0x50 - 0x5f */
+    "\r\000/"                                                           /* 0x60 - 0x6f */
+    ,
+    "\000\033!@#$%^&*()_+\177\t"                                        /* 0x00 - 0x0f */
+    "QWERTYUIOP{}\r\000AS"                                              /* 0x10 - 0x1f */
+    "DFGHJKL:\"`\000\\ZXCV"                                             /* 0x20 - 0x2f */
+    "BNM<>?\000*\000 \000\201\202\203\204\205"                          /* 0x30 - 0x3f */
+    "\206\207\210\211\212\000\000789-456+1"                             /* 0x40 - 0x4f */
+    "230\177\000\000\213\214\000\000\000\000\000\000\000\000\000\000"   /* 0x50 - 0x5f */
+    "\r\000/"                                                           /* 0x60 - 0x6f */
+};
+
+/* FUNCTIONS *****************************************************************/
+
+static VOID
+KbdSendCommandToMouse(UCHAR Command)
+{
+    ULONG Retry = 20000;
+
+    while (kbd_read_status() & KBD_STAT_OBF && Retry--)
+    {
+        kbd_read_input();
+        KeStallExecutionProcessor(50);
+    }
+
+    Retry = 20000;
+    while (kbd_read_status() & KBD_STAT_IBF && Retry--)
+        KeStallExecutionProcessor(50);
+
+    kbd_write_command(CTRL_WRITE_MOUSE);
+
+    Retry = 20000;
+    while (kbd_read_status() & KBD_STAT_IBF && Retry--)
+        KeStallExecutionProcessor(50);
+
+    kbd_write_data(Command);
+
+    Retry = 20000;
+    while (!(kbd_read_status() & KBD_STAT_OBF) && Retry--)
+        KeStallExecutionProcessor(50);
+
+    if (kbd_read_input() != MOUSE_ACK) { ; }
+
+    return;
+}
+
+static VOID KbdEnableMouse()
+{
+    KbdSendCommandToMouse(MOU_ENAB);
+}
+
+static VOID KbdDisableMouse()
+{
+    KbdSendCommandToMouse(MOU_DISAB);
+}
+
+static CHAR
+KdbpTryGetCharKeyboard(PULONG ScanCode, ULONG Retry)
+{
+    static UCHAR last_key = 0;
+    static UCHAR shift = 0;
+    char c;
+    BOOLEAN KeepRetrying = (Retry == 0);
+
+    while (KeepRetrying || Retry-- > 0)
+    {
+        while (kbd_read_status() & KBD_STAT_OBF)
+        {
+            UCHAR scancode;
+
+            scancode = kbd_read_input();
+
+            /* check for SHIFT-keys */
+            if (((scancode & 0x7F) == 42) || ((scancode & 0x7F) == 54))
+            {
+                shift = !(scancode & 0x80);
+                continue;
+            }
+
+            /* ignore all other RELEASED-codes */
+            if (scancode & 0x80)
+            {
+                last_key = 0;
+            }
+            else if (last_key != scancode)
+            {
+                //printf("kbd: %d, %d, %c\n", scancode, last_key, keyb_layout[shift][scancode]);
+                last_key = scancode;
+                c = keyb_layout[shift][scancode];
+                *ScanCode = scancode;
+
+                if (c > 0)
+                    return c;
+            }
+        }
+    }
+
+    return -1;
 }
 
 /* SCREEN FUNCTIONS **********************************************************/
@@ -333,6 +456,19 @@ KdpSerialInit(ULONG BootPhase)
     {
         HalDisplayString("\r\n   Serial debugging enabled\r\n\r\n");
     }
+}
+
+static CHAR
+KdbpTryGetCharSerial(ULONG Retry)
+{
+    CHAR Result = -1;
+
+    if (Retry == 0)
+        while (CpGetByte(&SerialPortInfo, (PUCHAR)&Result, FALSE, FALSE) != CP_GET_SUCCESS);
+    else
+        while (CpGetByte(&SerialPortInfo, (PUCHAR)&Result, FALSE, FALSE) != CP_GET_SUCCESS && Retry-- > 0);
+
+    return Result;
 }
 
 /* FILE FUNCTIONS **********************************************************/
@@ -529,7 +665,7 @@ KdpFileInit(ULONG BootPhase)
     }
 }
 
-static VOID
+VOID
 KdpPrintString(
     _In_ PSTRING Output)
 {
@@ -542,6 +678,48 @@ KdpPrintString(
 }
 
 /* FUNCTIONS ****************************************************************/
+
+CHAR
+KdpTryGetChar(
+    _Out_ PULONG ScanCode,
+    _In_ ULONG Retry)
+{
+    CHAR Response;
+
+    /* Check if this is serial debugging mode */
+    if (KdbDebugState & KD_DEBUG_KDSERIAL)
+    {
+        /* Get the character from serial */
+        *ScanCode = 0;
+        Response = KdbpTryGetCharSerial(Retry);
+        if (Response == KEY_ESC)
+        {
+            do
+            {
+                Response = KdbpTryGetCharSerial(MAXULONG);
+            } while (Response == -1);
+            if (Response == '[')
+            {
+                do
+                {
+                    Response = KdbpTryGetCharSerial(MAXULONG);
+                } while (Response == -1);
+                switch (Response)
+                {
+                    case 'A': *ScanCode = KEY_SCAN_UP; break;
+                    case 'B': *ScanCode = KEY_SCAN_DOWN; break;
+                    default: break;
+                }
+            }
+        }
+        return Response;
+    }
+    else
+    {
+        /* Get the response from the keyboard */
+        return KdbpTryGetCharKeyboard(ScanCode, Retry);
+    }
+}
 
 /*
  * @implemented
@@ -676,7 +854,7 @@ KdSendPacket(
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 KDSTATUS
 NTAPI
@@ -687,6 +865,11 @@ KdReceivePacket(
     OUT PULONG DataLength,
     IN OUT PKD_CONTEXT Context)
 {
+    STRING StringChar;
+    CHAR Response;
+    CHAR MessageBuffer[100];
+    STRING ResponseString;
+
 #ifndef KDBG
     if (PacketType == PACKET_TYPE_KD_STATE_MANIPULATE)
     {
@@ -699,6 +882,41 @@ KdReceivePacket(
         return KdPacketReceived;
     }
 #endif
+    if (PacketType == PACKET_TYPE_KD_DEBUG_IO)
+    {
+        ResponseString.Buffer = MessageBuffer;
+        ResponseString.Length = 0;
+        ResponseString.MaximumLength = min(sizeof(MessageBuffer), MessageData->MaximumLength);
+        StringChar.Buffer = &Response;
+        StringChar.Length = StringChar.MaximumLength = sizeof(Response);
+
+        /* Display the string and print a new line for log neatness */
+        *StringChar.Buffer = '\n';
+        KdpPrintString(&StringChar);
+
+        /* Print the kdb prompt */
+        KdpPrintString(&KdbPromptString);
+
+        if (!(KdbDebugState & KD_DEBUG_KDSERIAL))
+            KbdDisableMouse();
+
+        /* Read response */
+        KdpReadCommand(&ResponseString);
+        KdpCommandHistoryAppend(ResponseString.Buffer);
+
+        /* Print a new line */
+        *StringChar.Buffer = '\n';
+        KdpPrintString(&StringChar);
+
+        /* Return the length */
+        RtlCopyMemory(MessageData->Buffer, ResponseString.Buffer, ResponseString.Length);
+        *DataLength = ResponseString.Length;
+
+        if (!(KdbDebugState & KD_DEBUG_KDSERIAL))
+            KbdEnableMouse();
+
+        return KdPacketReceived;
+    }
 
     return KdPacketTimedOut;
 }

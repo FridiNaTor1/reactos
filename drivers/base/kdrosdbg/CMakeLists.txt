@@ -3,6 +3,7 @@ spec2def(kdcom.dll kdrosdbg.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     kdrosdbg.c
+    kd_cli.c
     kdrosdbg.rc
     ${CMAKE_CURRENT_BINARY_DIR}/kdcom.def)
 
