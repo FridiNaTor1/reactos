@@ -377,35 +377,26 @@ elseif(ARCH STREQUAL "arm")
         ${REACTOS_SOURCE_DIR}/ntoskrnl/rtl/arm/rtlexcpt.c)
 endif()
 
-if(NOT _WINKD_)
-    if(KDBG)
-        add_definitions(-DKDBG)
-    endif()
+if(_WINKD_)
+    add_definitions(-D_WINKD_)
+elseif(KDBG)
+    add_definitions(-DKDBG)
 
     if(ARCH STREQUAL "i386")
-        if(KDBG)
-            list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/i386/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/i386/i386-dis.c)
-        endif()
+        list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/i386/kdb_help.S)
+        list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/i386/i386-dis.c)
     elseif(ARCH STREQUAL "amd64")
-        if(KDBG)
-            list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/amd64/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/i386/i386-dis.c)
-        endif()
+        list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/amd64/kdb_help.S)
+        list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/i386/i386-dis.c)
     elseif(ARCH STREQUAL "arm")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/arm/kdbg.c)
     endif()
 
-    if(KDBG)
-        list(APPEND SOURCE
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdio.c
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdmain.c
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb.c
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_cli.c
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_expr.c
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_symbols.c)
-    endif()
-
-else()
-    add_definitions(-D_WINKD_)
+    list(APPEND SOURCE
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdio.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdmain.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_cli.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_expr.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_symbols.c)
 endif()
