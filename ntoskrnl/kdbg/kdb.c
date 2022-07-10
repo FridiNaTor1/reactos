@@ -1163,8 +1163,6 @@ KdbpInternalEnter(VOID)
     PVOID SavedInitialStack, SavedStackBase, SavedKernelStack;
     ULONG SavedStackLimit;
 
-    KbdDisableMouse();
-
     /* Take control of the display */
     KdpScreenAcquire();
 
@@ -1189,8 +1187,6 @@ KdbpInternalEnter(VOID)
 
     /* Release the display */
     KdpScreenRelease();
-
-    KbdEnableMouse();
 }
 
 static ULONG

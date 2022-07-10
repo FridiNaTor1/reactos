@@ -250,9 +250,3 @@ NTSTATUS
 KdbpSafeWriteMemory(OUT PVOID Dest,
                     IN PVOID Src,
                     IN ULONG Bytes);
-
-VOID
-KbdDisableMouse(VOID);
-
-VOID
-KbdEnableMouse(VOID);
