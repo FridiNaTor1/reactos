@@ -583,14 +583,12 @@ KdpSendPacket(
         PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange = (PDBGKD_ANY_WAIT_STATE_CHANGE)MessageHeader->Buffer;
         if (WaitStateChange->NewState == DbgKdLoadSymbolsStateChange)
         {
-#ifdef KDBG
             PLDR_DATA_TABLE_ENTRY LdrEntry;
             /* Load symbols. Currently implemented only for KDBG! */
             if (KdbpSymFindModule((PVOID)(ULONG_PTR)WaitStateChange->u.LoadSymbols.BaseOfDll, -1, &LdrEntry))
             {
                 KdbSymProcessSymbols(LdrEntry, !WaitStateChange->u.LoadSymbols.UnloadSymbols);
             }
-#endif
             return;
         }
         else if (WaitStateChange->NewState == DbgKdExceptionStateChange)
@@ -608,7 +606,6 @@ KdpSendPacket(
         {
             KD_CONTINUE_TYPE Result;
 
-#ifdef KDBG
             /* Check if this is an assertion failure */
             if (KdbgExceptionRecord.ExceptionCode == STATUS_ASSERTION_FAILURE)
             {
@@ -620,11 +617,6 @@ KdpSendPacket(
                                                KdbgContext.SegCs & 1,
                                                &KdbgContext,
                                                KdbgFirstChanceException);
-#else
-            /* We'll manually dump the stack for the user... */
-            KeRosDumpStackFrames(NULL, 0);
-            Result = kdHandleException;
-#endif
             if (Result != kdHandleException)
                 KdbgContinueStatus = STATUS_SUCCESS;
             else
@@ -650,7 +642,6 @@ KdpReceivePacket(
     OUT PULONG DataLength,
     IN OUT PKD_CONTEXT Context)
 {
-#ifdef KDBG
     KIRQL OldIrql;
     STRING StringChar;
     CHAR Response;
@@ -658,7 +649,6 @@ KdpReceivePacket(
     ULONG DummyScanCode;
     CHAR MessageBuffer[100];
     STRING ResponseString;
-#endif
 
     if (PacketType == PACKET_TYPE_KD_STATE_MANIPULATE)
     {
@@ -695,7 +685,6 @@ KdpReceivePacket(
     if (PacketType != PACKET_TYPE_KD_DEBUG_IO)
         return KdPacketTimedOut;
 
-#ifdef KDBG
     ResponseString.Buffer = MessageBuffer;
     ResponseString.Length = 0;
     ResponseString.MaximumLength = min(sizeof(MessageBuffer), MessageData->MaximumLength);
@@ -788,7 +777,6 @@ KdpReceivePacket(
     if (!(KdbDebugState & KD_DEBUG_KDSERIAL))
         KbdEnableMouse();
 
-#endif
     return KdPacketReceived;
 }
 
