@@ -409,7 +409,6 @@ if(NOT _WINKD_)
             ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_cli.c
             ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_expr.c
             ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_keyboard.c
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_serial.c
             ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_symbols.c)
     endif()
 

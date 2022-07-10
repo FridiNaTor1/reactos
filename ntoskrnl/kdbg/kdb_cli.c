@@ -35,16 +35,6 @@
 
 /* DEFINES *******************************************************************/
 
-#define KEY_SCAN_UP     72
-#define KEY_SCAN_DOWN   80
-
-/* Scan codes of keyboard keys: */
-#define KEYSC_END       0x004f
-#define KEYSC_PAGEUP    0x0049
-#define KEYSC_PAGEDOWN  0x0051
-#define KEYSC_HOME      0x0047
-#define KEYSC_ARROWUP   0x0048
-
 #define KDB_ENTER_CONDITION_TO_STRING(cond)                               \
                    ((cond) == KdbDoNotEnter ? "never" :                   \
                    ((cond) == KdbEnterAlways ? "always" :                 \
@@ -135,13 +125,6 @@ BOOLEAN
 static PKDBG_CLI_ROUTINE KdbCliCallbacks[10];
 static BOOLEAN KdbUseIntelSyntax = FALSE; /* Set to TRUE for intel syntax */
 static BOOLEAN KdbBreakOnModuleLoad = FALSE; /* Set to TRUE to break into KDB when a module is loaded */
-
-static ULONG KdbNumberOfRowsPrinted = 0;
-static ULONG KdbNumberOfColsPrinted = 0;
-static BOOLEAN KdbOutputAborted = FALSE;
-static BOOLEAN KdbRepeatLastCommand = FALSE;
-static LONG KdbNumberOfRowsTerminal = -1;
-static LONG KdbNumberOfColsTerminal = -1;
 
 PCHAR KdbInitFileBuffer = NULL; /* Buffer where KDBinit file is loaded into during initialization */
 BOOLEAN KdbpBugCheckRequested = FALSE;
@@ -1214,9 +1197,6 @@ KdbpCmdBackTrace(
             KdbpPrint("<%p>", (PVOID)Context.Rip);
         KdbpPrint("\n");
 
-        if (KdbOutputAborted)
-            break;
-
         GotNextFrame = GetNextFrame(&Context);
         if (!GotNextFrame)
         {
@@ -1354,9 +1334,6 @@ KdbpCmdBackTrace(
             KdbpPrint("<%08x>\n", Address);
         else
             KdbpPrint("\n");
-
-        if (KdbOutputAborted)
-            break;
 
         if (!GotNextFrame)
         {
@@ -2515,12 +2492,6 @@ KdbpCmdReboot(
     return FALSE;
 }
 
-
-VOID
-KdbpPager(
-    IN PCHAR Buffer,
-    IN ULONG BufLength);
-
 /*!\brief Display debug messages on screen, with paging.
  *
  * Keys for per-page view: Home, End, PageUp, Arrow Up, PageDown,
@@ -2551,15 +2522,15 @@ KdbpCmdDmesg(
     if (KdbDmesgTotalWritten <= KdpDmesgBufferSize)
     {
         /* Show buffer (KdpDmesgBuffer + beg, num) */
-        KdbpPager(KdpDmesgBuffer, KdpDmesgCurrentPosition);
+        KdbpPrint(KdpDmesgBuffer, KdpDmesgCurrentPosition);
     }
     else
     {
         /* Show 2 buffers: (KdpDmesgBuffer + beg, KdpDmesgBufferSize - beg)
          *            and: (KdpDmesgBuffer,       end) */
-        KdbpPager(KdpDmesgBuffer + beg, KdpDmesgBufferSize - beg);
+        KdbpPrint(KdpDmesgBuffer + beg, KdpDmesgBufferSize - beg);
         KdbpPrint("*** Dmesg: buffer rollup ***\n");
-        KdbpPager(KdpDmesgBuffer,       end);
+        KdbpPrint(KdpDmesgBuffer,       end);
     }
     KdbpPrint("*** Dmesg: end of output ***\n");
 
@@ -2792,112 +2763,11 @@ KdbpPrint(
     IN ...  OPTIONAL)
 {
     static CHAR Buffer[4096];
-    static BOOLEAN TerminalInitialized = FALSE;
-    static BOOLEAN TerminalConnected = FALSE;
-    static BOOLEAN TerminalReportsSize = TRUE;
     CHAR c = '\0';
     PCHAR p, p2;
     ULONG Length;
     SIZE_T i, j;
-    LONG RowsPrintedByTerminal;
-    ULONG ScanCode;
     va_list ap;
-
-    /* Check if the user has aborted output of the current command */
-    if (KdbOutputAborted)
-        return;
-
-    /* Initialize the terminal */
-    if (!TerminalInitialized)
-    {
-        KdpDprintf("\x1b[7h");      /* Enable linewrap */
-
-        /* Query terminal type */
-        /*DbgPrint("\x1b[Z");*/
-        KdpDprintf("\x05");
-
-        TerminalInitialized = TRUE;
-        Length = 0;
-        KeStallExecutionProcessor(100000);
-
-        for (;;)
-        {
-            c = KdbpTryGetCharSerial(5000);
-            if (c == -1)
-                break;
-
-            Buffer[Length++] = c;
-            if (Length >= (sizeof(Buffer) - 1))
-                break;
-        }
-
-        Buffer[Length] = '\0';
-        if (Length > 0)
-            TerminalConnected = TRUE;
-    }
-
-    /* Get number of rows and columns in terminal */
-    if ((KdbNumberOfRowsTerminal < 0) || (KdbNumberOfColsTerminal < 0) ||
-        (KdbNumberOfRowsPrinted) == 0) /* Refresh terminal size each time when number of rows printed is 0 */
-    {
-        if ((KdbDebugState & KD_DEBUG_KDSERIAL) && TerminalConnected && TerminalReportsSize)
-        {
-            /* Try to query number of rows from terminal. A reply looks like "\x1b[8;24;80t" */
-            TerminalReportsSize = FALSE;
-            KeStallExecutionProcessor(100000);
-            KdpDprintf("\x1b[18t");
-            c = KdbpTryGetCharSerial(5000);
-
-            if (c == KEY_ESC)
-            {
-                c = KdbpTryGetCharSerial(5000);
-                if (c == '[')
-                {
-                    Length = 0;
-
-                    for (;;)
-                    {
-                        c = KdbpTryGetCharSerial(5000);
-                        if (c == -1)
-                            break;
-
-                        Buffer[Length++] = c;
-                        if (isalpha(c) || Length >= (sizeof(Buffer) - 1))
-                            break;
-                    }
-
-                    Buffer[Length] = '\0';
-                    if (Buffer[0] == '8' && Buffer[1] == ';')
-                    {
-                        for (i = 2; (i < Length) && (Buffer[i] != ';'); i++);
-
-                        if (Buffer[i] == ';')
-                        {
-                            Buffer[i++] = '\0';
-
-                            /* Number of rows is now at Buffer + 2 and number of cols at Buffer + i */
-                            KdbNumberOfRowsTerminal = strtoul(Buffer + 2, NULL, 0);
-                            KdbNumberOfColsTerminal = strtoul(Buffer + i, NULL, 0);
-                            TerminalReportsSize = TRUE;
-                        }
-                    }
-                }
-                /* Clear further characters */
-                while ((c = KdbpTryGetCharSerial(5000)) != -1);
-            }
-        }
-
-        if (KdbNumberOfRowsTerminal <= 0)
-        {
-            /* Set number of rows to the default. */
-            KdbNumberOfRowsTerminal = 23; //24; //Mna.: 23 for SCREEN debugport
-        }
-        else if (KdbNumberOfColsTerminal <= 0)
-        {
-            /* Set number of cols to the default. */
-            KdbNumberOfColsTerminal = 75; //80; //Mna.: 75 for SCREEN debugport
-        }
-    }
 
     /* Get the string */
     va_start(ap, Format);
@@ -2910,58 +2780,6 @@ KdbpPrint(
     {
         i = strcspn(p, "\n");
 
-        /* Calculate the number of lines which will be printed in the terminal
-         * when outputting the current line
-         */
-        if (i > 0)
-            RowsPrintedByTerminal = (i + KdbNumberOfColsPrinted - 1) / KdbNumberOfColsTerminal;
-        else
-            RowsPrintedByTerminal = 0;
-
-        if (p[i] == '\n')
-            RowsPrintedByTerminal++;
-
-        /*DbgPrint("!%d!%d!%d!%d!", KdbNumberOfRowsPrinted, KdbNumberOfColsPrinted, i, RowsPrintedByTerminal);*/
-
-        /* Display a prompt if we printed one screen full of text */
-        if (KdbNumberOfRowsTerminal > 0 &&
-            (LONG)(KdbNumberOfRowsPrinted + RowsPrintedByTerminal) >= KdbNumberOfRowsTerminal)
-        {
-            KdbRepeatLastCommand = FALSE;
-
-            if (KdbNumberOfColsPrinted > 0)
-                KdpDprintf("\n");
-
-            KdpDprintf("--- Press q to abort, any other key to continue ---");
-            RowsPrintedByTerminal++; /* added by Mna. */
-
-            if (KdbDebugState & KD_DEBUG_KDSERIAL)
-                c = KdbpGetCharSerial();
-            else
-                c = KdbpGetCharKeyboard(&ScanCode);
-
-            if (c == '\r')
-            {
-                /* Try to read '\n' which might follow '\r' - if \n is not received here
-                 * it will be interpreted as "return" when the next command should be read.
-                 */
-                if (KdbDebugState & KD_DEBUG_KDSERIAL)
-                    c = KdbpTryGetCharSerial(5);
-                else
-                    c = KdbpTryGetCharKeyboard(&ScanCode, 5);
-            }
-
-            KdpDprintf("\n");
-            if (c == 'q')
-            {
-                KdbOutputAborted = TRUE;
-                return;
-            }
-
-            KdbNumberOfRowsPrinted = 0;
-            KdbNumberOfColsPrinted = 0;
-        }
-
         /* Insert a NUL after the line and print only the current line. */
         if (p[i] == '\n' && p[i + 1] != '\0')
         {
@@ -2973,22 +2791,19 @@ KdbpPrint(
             c = '\0';
         }
 
-        /* Remove escape sequences from the line if there's no terminal connected */
-        if (!TerminalConnected)
+        /* Remove escape sequences from the line */
+        while ((p2 = strrchr(p, '\x1b'))) /* Look for escape character */
         {
-            while ((p2 = strrchr(p, '\x1b'))) /* Look for escape character */
+            size_t len = strlen(p2);
+            if (p2[1] == '[')
             {
-                size_t len = strlen(p2);
-                if (p2[1] == '[')
-                {
-                    j = 2;
-                    while (!isalpha(p2[j++]));
-                    memmove(p2, p2 + j, len + 1 - j);
-                }
-                else
-                {
-                    memmove(p2, p2 + 1, len);
-                }
+                j = 2;
+                while (!isalpha(p2[j++]));
+                memmove(p2, p2 + j, len + 1 - j);
+            }
+            else
+            {
+                memmove(p2, p2 + 1, len);
             }
         }
 
@@ -2997,22 +2812,16 @@ KdbpPrint(
         if (c != '\0')
             p[i + 1] = c;
 
-        /* Set p to the start of the next line and
-         * remember the number of rows/cols printed
-         */
+        /* Set p to the start of the next line */
         p += i;
         if (p[0] == '\n')
         {
             p++;
-            KdbNumberOfColsPrinted = 0;
         }
         else
         {
             ASSERT(p[0] == '\0');
-            KdbNumberOfColsPrinted += i;
         }
-
-        KdbNumberOfRowsPrinted += RowsPrintedByTerminal;
     }
 }
 
@@ -3054,332 +2863,6 @@ memrchr(const void *s, int c, size_t n)
         } while (--n != 0);
     }
     return NULL;
-}
-
-/*!\brief Calculate pointer position for N lines upper of current position.
- *
- * \param Buffer     Characters buffer to operate on.
- * \param BufLength  Buffer size.
- *
- * \note Calculate pointer position for N lines upper of current displaying
- *       position within the given buffer.
- *
- * Used by KdbpPager().
- * Now N lines count is hardcoded to KdbNumberOfRowsTerminal.
- */
-PCHAR
-CountOnePageUp(PCHAR Buffer, ULONG BufLength, PCHAR pCurPos)
-{
-    PCHAR p;
-    // p0 is initial guess of Page Start
-    ULONG p0len = KdbNumberOfRowsTerminal * KdbNumberOfColsTerminal;
-    PCHAR p0 = pCurPos - p0len;
-    PCHAR prev_p = p0, p1;
-    ULONG j;
-
-    if (pCurPos < Buffer)
-        pCurPos = Buffer;
-    ASSERT(pCurPos <= Buffer + BufLength);
-
-    p = memrchr(p0, '\n', p0len);
-    if (NULL == p)
-        p = p0;
-    for (j = KdbNumberOfRowsTerminal; j--; )
-    {
-        int linesCnt;
-        p1 = memrchr(p0, '\n', p-p0);
-        prev_p = p;
-        p = p1;
-        if (NULL == p)
-        {
-            p = prev_p;
-            if (NULL == p)
-                p = p0;
-            break;
-        }
-        linesCnt = (KdbNumberOfColsTerminal+prev_p-p-2) / KdbNumberOfColsTerminal;
-        if (linesCnt > 1)
-            j -= linesCnt-1;
-    }
-
-    ASSERT(p != 0);
-    ++p;
-    return p;
-}
-
-/*!\brief Prints the given string with, page by page.
- *
- * \param Buffer     Characters buffer to print.
- * \param BufferLen  Buffer size.
- *
- * \note Doesn't correctly handle \\t and terminal escape sequences when calculating the
- *       number of lines required to print a single line from the Buffer in the terminal.
- *       Maximum length of buffer is limited only by memory size.
- *
- * Note: BufLength should be greater then (KdbNumberOfRowsTerminal * KdbNumberOfColsTerminal).
- *
- */
-VOID
-KdbpPager(
-    IN PCHAR Buffer,
-    IN ULONG BufLength)
-{
-    static CHAR InBuffer[4096];
-    static BOOLEAN TerminalInitialized = FALSE;
-    static BOOLEAN TerminalConnected = FALSE;
-    static BOOLEAN TerminalReportsSize = TRUE;
-    CHAR c = '\0';
-    PCHAR p, p2;
-    ULONG Length;
-    SIZE_T i, j;
-    LONG RowsPrintedByTerminal;
-    ULONG ScanCode;
-
-    if( BufLength == 0)
-      return;
-
-    /* Check if the user has aborted output of the current command */
-    if (KdbOutputAborted)
-        return;
-
-    /* Initialize the terminal */
-    if (!TerminalInitialized)
-    {
-        KdpDprintf("\x1b[7h");      /* Enable linewrap */
-
-        /* Query terminal type */
-        /*DbgPrint("\x1b[Z");*/
-        KdpDprintf("\x05");
-
-        TerminalInitialized = TRUE;
-        Length = 0;
-        KeStallExecutionProcessor(100000);
-
-        for (;;)
-        {
-            c = KdbpTryGetCharSerial(5000);
-            if (c == -1)
-                break;
-
-            InBuffer[Length++] = c;
-            if (Length >= (sizeof(InBuffer) - 1))
-                break;
-        }
-
-        InBuffer[Length] = '\0';
-        if (Length > 0)
-            TerminalConnected = TRUE;
-    }
-
-    /* Get number of rows and columns in terminal */
-    if ((KdbNumberOfRowsTerminal < 0) || (KdbNumberOfColsTerminal < 0) ||
-        (KdbNumberOfRowsPrinted) == 0) /* Refresh terminal size each time when number of rows printed is 0 */
-    {
-        if ((KdbDebugState & KD_DEBUG_KDSERIAL) && TerminalConnected && TerminalReportsSize)
-        {
-            /* Try to query number of rows from terminal. A reply looks like "\x1b[8;24;80t" */
-            TerminalReportsSize = FALSE;
-            KeStallExecutionProcessor(100000);
-            KdpDprintf("\x1b[18t");
-            c = KdbpTryGetCharSerial(5000);
-
-            if (c == KEY_ESC)
-            {
-                c = KdbpTryGetCharSerial(5000);
-                if (c == '[')
-                {
-                    Length = 0;
-
-                    for (;;)
-                    {
-                        c = KdbpTryGetCharSerial(5000);
-                        if (c == -1)
-                            break;
-
-                        InBuffer[Length++] = c;
-                        if (isalpha(c) || Length >= (sizeof(InBuffer) - 1))
-                            break;
-                    }
-
-                    InBuffer[Length] = '\0';
-                    if (InBuffer[0] == '8' && InBuffer[1] == ';')
-                    {
-                        for (i = 2; (i < Length) && (InBuffer[i] != ';'); i++);
-
-                        if (Buffer[i] == ';')
-                        {
-                            Buffer[i++] = '\0';
-
-                            /* Number of rows is now at Buffer + 2 and number of cols at Buffer + i */
-                            KdbNumberOfRowsTerminal = strtoul(InBuffer + 2, NULL, 0);
-                            KdbNumberOfColsTerminal = strtoul(InBuffer + i, NULL, 0);
-                            TerminalReportsSize = TRUE;
-                        }
-                    }
-                }
-                /* Clear further characters */
-                while ((c = KdbpTryGetCharSerial(5000)) != -1);
-            }
-        }
-
-        if (KdbNumberOfRowsTerminal <= 0)
-        {
-            /* Set number of rows to the default. */
-            KdbNumberOfRowsTerminal = 24;
-        }
-        else if (KdbNumberOfColsTerminal <= 0)
-        {
-            /* Set number of cols to the default. */
-            KdbNumberOfColsTerminal = 80;
-        }
-    }
-
-    /* Get the string */
-    p = Buffer;
-
-    while (p[0] != '\0')
-    {
-        if ( p > Buffer+BufLength)
-        {
-          KdpDprintf("Dmesg: error, p > Buffer+BufLength,d=%d", p - (Buffer+BufLength));
-          return;
-        }
-        i = strcspn(p, "\n");
-
-        // Are we out of buffer?
-        if (p + i > Buffer + BufLength)
-          // Leaving pager function:
-          break;
-
-        /* Calculate the number of lines which will be printed in the terminal
-         * when outputting the current line.
-         */
-        if (i > 0)
-            RowsPrintedByTerminal = (i + KdbNumberOfColsPrinted - 1) / KdbNumberOfColsTerminal;
-        else
-            RowsPrintedByTerminal = 0;
-
-        if (p[i] == '\n')
-            RowsPrintedByTerminal++;
-
-        /*DbgPrint("!%d!%d!%d!%d!", KdbNumberOfRowsPrinted, KdbNumberOfColsPrinted, i, RowsPrintedByTerminal);*/
-
-        /* Display a prompt if we printed one screen full of text */
-        if (KdbNumberOfRowsTerminal > 0 &&
-            (LONG)(KdbNumberOfRowsPrinted + RowsPrintedByTerminal) >= KdbNumberOfRowsTerminal)
-        {
-            KdbRepeatLastCommand = FALSE;
-
-            if (KdbNumberOfColsPrinted > 0)
-                KdpDprintf("\n");
-
-            KdpDprintf("--- Press q to abort, e/End,h/Home,u/PgUp, other key/PgDn ---");
-            RowsPrintedByTerminal++;
-
-            if (KdbDebugState & KD_DEBUG_KDSERIAL)
-                c = KdbpGetCharSerial();
-            else
-                c = KdbpGetCharKeyboard(&ScanCode);
-
-            if (c == '\r')
-            {
-                /* Try to read '\n' which might follow '\r' - if \n is not received here
-                 * it will be interpreted as "return" when the next command should be read.
-                 */
-                if (KdbDebugState & KD_DEBUG_KDSERIAL)
-                    c = KdbpTryGetCharSerial(5);
-                else
-                    c = KdbpTryGetCharKeyboard(&ScanCode, 5);
-            }
-
-            //DbgPrint("\n"); //Consize version: don't show pressed key
-            KdpDprintf(" '%c'/scan=%04x\n", c, ScanCode); // Shows pressed key
-
-            if (c == 'q')
-            {
-                KdbOutputAborted = TRUE;
-                return;
-            }
-            if (     ScanCode == KEYSC_END || c=='e')
-            {
-              PCHAR pBufEnd = Buffer + BufLength;
-              p = CountOnePageUp(Buffer, BufLength, pBufEnd);
-              i = strcspn(p, "\n");
-            }
-            else if (ScanCode == KEYSC_PAGEUP  || c=='u')
-            {
-              p = CountOnePageUp(Buffer, BufLength, p);
-              i = strcspn(p, "\n");
-            }
-            else if (ScanCode == KEYSC_HOME || c=='h')
-            {
-              p = Buffer;
-              i = strcspn(p, "\n");
-            }
-            else if (ScanCode == KEYSC_ARROWUP)
-            {
-              p = CountOnePageUp(Buffer, BufLength, p);
-              i = strcspn(p, "\n");
-            }
-
-            KdbNumberOfRowsPrinted = 0;
-            KdbNumberOfColsPrinted = 0;
-        }
-
-        /* Insert a NUL after the line and print only the current line. */
-        if (p[i] == '\n' && p[i + 1] != '\0')
-        {
-            c = p[i + 1];
-            p[i + 1] = '\0';
-        }
-        else
-        {
-            c = '\0';
-        }
-
-        /* Remove escape sequences from the line if there's no terminal connected */
-        if (!TerminalConnected)
-        {
-            while ((p2 = strrchr(p, '\x1b'))) /* Look for escape character */
-            {
-                size_t len = strlen(p2);
-                if (p2[1] == '[')
-                {
-                    j = 2;
-                    while (!isalpha(p2[j++]));
-                    memmove(p2, p2 + j, len + 1 - j);
-                }
-                else
-                {
-                    memmove(p2, p2 + 1, len);
-                }
-            }
-        }
-
-        // The main printing of the current line:
-        KdpDprintf(p);
-
-        // restore not null char with saved:
-        if (c != '\0')
-            p[i + 1] = c;
-
-        /* Set p to the start of the next line and
-         * remember the number of rows/cols printed
-         */
-        p += i;
-        if (p[0] == '\n')
-        {
-            p++;
-            KdbNumberOfColsPrinted = 0;
-        }
-        else
-        {
-            ASSERT(p[0] == '\0');
-            KdbNumberOfColsPrinted += i;
-        }
-
-        KdbNumberOfRowsPrinted += RowsPrintedByTerminal;
-    }
 }
 
 /*!\brief Reads a line of user-input.
@@ -3571,33 +3054,14 @@ KdbpCliMainLoop(
         KdbpPrint("\n");
     }
 
-    /* Flush the input buffer */
-    if (KdbDebugState & KD_DEBUG_KDSERIAL)
-    {
-        while (KdbpTryGetCharSerial(1) != -1);
-    }
-    else
-    {
-        ULONG ScanCode;
-        while (KdbpTryGetCharKeyboard(&ScanCode, 1) != -1);
-    }
-
     /* Main loop */
     do
     {
-        /* Reset the number of rows/cols printed */
-        KdbNumberOfRowsPrinted = KdbNumberOfColsPrinted = 0;
-
         /* Read a command and remember it */
         KdbpReadCommand(Command, sizeof(Command));
 
-        /* Reset the number of rows/cols printed and output aborted state */
-        KdbNumberOfRowsPrinted = KdbNumberOfColsPrinted = 0;
-        KdbOutputAborted = FALSE;
-
         /* Call the command */
         Continue = KdbpDoCommand(Command);
-        KdbOutputAborted = FALSE;
     }
     while (Continue);
 }
