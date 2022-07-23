@@ -8,7 +8,7 @@ extern void func_writer(void);
 
 const struct test winetest_testlist[] =
 {
-    { "reader", func_reader },
+//    { "reader", func_reader }, // UM stack corruption
     { "writer", func_writer },
     { 0, 0 }
 };

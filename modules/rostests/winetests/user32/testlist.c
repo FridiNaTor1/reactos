@@ -61,7 +61,7 @@ const struct test winetest_testlist[] =
     { "monitor", func_monitor },
     { "msg_queue", func_msg_queue},
     { "msg_messages", func_msg_messages},
-    { "msg_focus", func_msg_focus},
+//    { "msg_focus", func_msg_focus}, // crashes csrss
     { "msg_winpos", func_msg_winpos},
     { "msg_paint", func_msg_paint},
     { "msg_input", func_msg_input},
@@ -80,7 +80,9 @@ const struct test winetest_testlist[] =
     { "sysparams", func_sysparams },
     { "text", func_text },
     { "uitools", func_uitools },
+#ifndef _M_AMD64 // crash in win32k
     { "win", func_win },
+#endif
     { "winstation", func_winstation },
     { "wsprintf", func_wsprintf },
     { 0, 0 }

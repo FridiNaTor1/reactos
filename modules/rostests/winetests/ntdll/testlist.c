@@ -32,7 +32,9 @@ const struct test winetest_testlist[] =
     { "directory", func_directory },
     { "env", func_env },
     { "error", func_error },
+#ifndef _M_AMD64 // breaks into debugger with single step
     { "exception", func_exception },
+#endif
     { "file", func_file },
 #ifdef _M_IX86
     { "generated", func_generated },

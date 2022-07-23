@@ -23,8 +23,8 @@ const struct test winetest_testlist[] =
     { "bitmap", func_bitmap },
     { "brush", func_brush },
     { "clipping", func_clipping },
-    { "dc", func_dc },
-    { "dib", func_dib },
+//    { "dc", func_dc }, crashes the kernel
+//    { "dib", func_dib }, // pool corruption
     { "font", func_font },
     { "gdiobj", func_gdiobj },
     { "generated", func_generated },

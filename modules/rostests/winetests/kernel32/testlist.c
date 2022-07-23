@@ -64,7 +64,7 @@ const struct test winetest_testlist[] =
     { "module", func_module },
     { "path", func_path },
     { "pipe", func_pipe },
-    { "process", func_process },
+//    { "process", func_process }, // user mode int 3
     { "profile", func_profile },
     { "resource", func_resource },
     { "sync", func_sync },

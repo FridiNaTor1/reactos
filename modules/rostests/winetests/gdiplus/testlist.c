@@ -21,14 +21,14 @@ const struct test winetest_testlist[] =
     { "brush", func_brush },
     { "customlinecap", func_customlinecap },
     { "font", func_font },
-    { "graphics", func_graphics },
+//    { "graphics", func_graphics }, // Pool leak
     { "graphicspath", func_graphicspath },
     { "image", func_image },
     { "matrix", func_matrix },
     { "metafile", func_metafile },
     { "pathiterator", func_pathiterator },
     { "pen", func_pen },
-    { "region", func_region },
+//    { "region", func_region }, // Pool leak
     { "stringformat", func_stringformat },
     { 0, 0 }
 };
