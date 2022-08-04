@@ -4226,7 +4226,7 @@ StartScan:
     /* Write the remote PEB address and clear it locally, we no longer use it */
     CreateProcessMsg->PebAddressNative = RemotePeb;
 #ifdef _WIN64
-    //DPRINT1("TODO: WOW64 is not supported yet\n");
+    DPRINT1("TODO: WOW64 is not supported yet\n");
     CreateProcessMsg->PebAddressWow64 = 0;
 #else
     CreateProcessMsg->PebAddressWow64 = (ULONG)RemotePeb;

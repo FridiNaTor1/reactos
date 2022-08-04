@@ -78,7 +78,6 @@ _dump_context(PCONTEXT pc)
     DbgPrint("R8: %I64x   R9: %I64x   R10: %I64x   R11: %I64x\n", pc->R8, pc->R9, pc->R10, pc->R11);
     DbgPrint("R12: %I64x   R13: %I64x   R14: %I64x   R15: %I64x\n", pc->R12, pc->R13, pc->R14, pc->R15);
     DbgPrint("EFLAGS: %.8x\n", pc->EFlags);
-    //__debugbreak();
 #elif defined(_M_ARM)
     DbgPrint("PC:  %08lx   LR:  %08lx   SP:  %08lx\n", pc->Pc);
     DbgPrint("R0:  %08lx   R1:  %08lx   R2:  %08lx   R3:  %08lx\n", pc->R0, pc->R1, pc->R2, pc->R3);

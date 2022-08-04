@@ -102,7 +102,7 @@ KiDispatchExceptionToUser(
     EXCEPTION_RECORD LocalExceptRecord;
     ULONG64 UserRsp;
     PKUSER_EXCEPTION_STACK UserStack;
-    //__debugbreak();
+
     /* Make sure we have a valid SS */
     if (TrapFrame->SegSs != (KGDT64_R3_DATA | RPL_MASK))
     {
