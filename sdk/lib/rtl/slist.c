@@ -104,9 +104,44 @@ RtlInterlockedPushListSList(
     _In_ ULONG Count)
 {
 #ifdef _WIN64
-    UNIMPLEMENTED;
-    DbgBreakPoint();
-    return NULL;
+    ASSERT(((ULONG_PTR)SListHead & 0xF) == 0);
+
+    if (RtlpUse16ByteSLists)
+    {
+        SLIST_HEADER OldSListHead, NewSListHead;
+        BOOLEAN exchanged;
+
+        do
+        {
+            /* Capture the current SListHead */
+            OldSListHead = *SListHead;
+
+            /* Link the last list entry */
+            ListEnd->Next = (PSLIST_ENTRY)(SListHead->Region & ~0xFLL);
+
+            /* Set up new SListHead */
+            NewSListHead = OldSListHead;
+            NewSListHead.Header16.Depth += Count;
+            NewSListHead.Header16.Sequence++;
+            NewSListHead.Region = (ULONG64)List;
+            NewSListHead.Header16.HeaderType = 1;
+            NewSListHead.Header16.Init = 1;
+
+            /* Atomically exchange the SlistHead with the new one */
+            exchanged = _InterlockedCompareExchange128((PULONG64)SListHead,
+                                                       NewSListHead.Region,
+                                                       NewSListHead.Alignment,
+                                                       (PULONG64)&OldSListHead);
+        } while (!exchanged);
+
+        return ListEnd->Next;
+    }
+    else
+    {
+        __debugbreak();
+        return NULL;
+    }
+
 #else
     SLIST_HEADER OldHeader, NewHeader;
     ULONGLONG Compare;
