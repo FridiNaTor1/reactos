@@ -365,6 +365,109 @@ RtlInterlockedPushEntrySListLoop16:
 
 ENDFUNC
 
+#if 0
+/* PSLIST_ENTRY
+ * NTAPI
+ * RtlInterlockedPushListSList(
+ *     _Inout_ PSLIST_HEADER SListHead,
+ *     _Inout_ __drv_aliasesMem PSLIST_ENTRY List,
+ *     _Inout_ PSLIST_ENTRY ListEnd,
+ *     _In_ ULONG Count)
+ */
+//ExpInterlockedPushListSList:
+FUNC RtlInterlockedPushListSList
+    .ENDPROLOG
+
+#if DBG
+    /* Make sure the List is 16 bytes aligned */
+    test rdx, HEX(0F)
+    jz RtlpInterlockedPushListSListChecked
+    /* Not aligned, raise an assertion */
+    int HEX(2C)
+RtlpInterlockedPushListSListChecked:
+
+    /* Make sure RtlpUse16ByteSLists is initialized */
+    cmp byte ptr [rip+RtlpUse16ByteSLists], HEX(FF)
+    jne RtlpInterlockedPushListSListChecked2
+    /* Not initialized, raise an assertion */
+    int HEX(2C)
+RtlpInterlockedPushListSListChecked2:
+#endif
+
+    /* Load ListHead->Alignment into rax */
+    mov rax, [rcx]
+
+    /* Load ListHead->Region into r9 */
+    mov r9, [rcx + 8]
+
+    /* Check for 16 byte SList support */
+    cmp byte ptr [rip+RtlpUse16ByteSLists], 0
+    jne RtlInterlockedPushListSList16
+
+    /* FIXME: Use the 8 byte header */
+    int 3
+    xor rax, rax
+    ret
+
+ENDFUNC
+
+FUNC RtlInterlockedPushListSList16
+    mov [rsp + P3Home], rbx
+    .SAVEREG rbx, P3Home
+    .ENDPROLOG
+
+    /* This is a 16 byte header
+       rcx = ListHead
+       rdx = ListEntry
+       rax = ListHead->Alignment
+       r9 = ListHead->Region */
+
+    /* Copy rcx/rdx to r8/r9, as we need rcx/rdx for the exchange */
+    mov r8, rcx
+    mov r9, rdx
+
+    /* Set NewListHead.NextEntry = ListEntry */
+    mov rcx, rdx
+
+    /* Set NewListHead.HeaderType = 1 and NewListHead.Init = 1 */
+    or rcx, (SLIST16B_HEADERTYPE_MASK or SLIST16B_INIT_MASK)
+
+    /* Set rdx = ListHead->Region */
+    mov rdx, [r8 + 8]
+
+RtlInterlockedPushListSListLoop16:
+    /* r8 = ListHead
+       r9 = ListEntry
+       rax = ListHead->Alignment
+       rdx = ListHead->Region
+    */
+
+    /* Move ListHead->NextEntry to rbx */
+    mov rbx, rdx
+    and rbx, SLIST16B_NEXTENTRY_MASK
+
+    /* Store next pointer in ListEntry->Next */
+    mov [r9], rbx
+
+    /* Copy and increment Depth and Sequence number to rbx */
+    lea rbx, [rax + SLIST16A_DEPTH_INC + SLIST16A_SEQUENCE_INC]
+
+    /* If [r8] equals rdx:rax, exchange it with rcx:rbx */
+    lock cmpxchg16b [r8]
+
+    /* If not equal, retry with rdx:rax, being the content of [r8] now */
+    jne RtlInterlockedPushEntrySListLoop16
+
+    /* Copy the old NextEntry pointer to rax */
+    mov rax, rdx
+    and rax, SLIST16B_NEXTENTRY_MASK
+
+    /* Return */
+    mov rbx, [rsp + P3Home]
+    ret
+
+ENDFUNC
+#endif
 
 /* PSLIST_ENTRY
  * NTAPI
