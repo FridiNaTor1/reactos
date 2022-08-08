@@ -69,6 +69,11 @@ PUBLIC RtlCaptureContext
     mov [rcx + CxSegGs], gs
     mov [rcx + CxSegSs], ss
 
+    test word ptr [rcx + CxSegDs], 1
+    jnz ds_ok
+    int 3
+ds_ok:
+
     /* Store stack pointer */
     mov [rcx + CxRsp], rax
 
