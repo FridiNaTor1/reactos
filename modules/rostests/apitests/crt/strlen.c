@@ -60,6 +60,7 @@ Test_strlen(PFN_STRLEN pstrlen)
         ok(len == 8, "Should not have gone backwards (got len %i)", (int)len);
     }
 #endif // TEST_CRTDLL
+    __writeeflags(__readeflags() & ~EFLAGS_DF);
 #endif
 }
 
