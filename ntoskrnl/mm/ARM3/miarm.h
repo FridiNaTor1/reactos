@@ -970,6 +970,7 @@ MI_WRITE_VALID_PTE(IN PMMPTE PointerPte,
 #if _M_AMD64
     ASSERT(!MI_IS_PAGE_TABLE_ADDRESS(MiPteToAddress(PointerPte)) ||
            (TempPte.u.Hard.NoExecute == 0));
+    ASSERT(MiPteToAddress(PointerPte) != (PVOID)0xFFFFF78000001000ULL);
 #endif
     *PointerPte = TempPte;
 }
