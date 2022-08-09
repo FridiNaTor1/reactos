@@ -773,6 +773,7 @@ ExAcquireResourceExclusiveLite(IN PERESOURCE Resource,
     KLOCK_QUEUE_HANDLE LockHandle;
     ERESOURCE_THREAD Thread;
     BOOLEAN Success;
+    DPRINT("[%p] ExAcquireResourceExclusiveLite(%p, %u)\n", PsGetCurrentProcess(), Resource, Wait);
 
     /* Sanity check */
     ASSERT((Resource->Flag & ResourceNeverExclusive) == 0);
@@ -787,6 +788,8 @@ ExAcquireResourceExclusiveLite(IN PERESOURCE Resource,
     /* Acquire the lock */
     ExAcquireResourceLock(Resource, &LockHandle);
     ExpCheckForApcsDisabled(LockHandle.OldIrql, Resource, (PKTHREAD)Thread);
+
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
 
     /* Check if there is a shared owner or exclusive owner */
 TryAcquire:
@@ -828,6 +831,10 @@ TryAcquire:
 
                 /* Set owner and return success */
                 Resource->OwnerEntry.OwnerThread = ExGetCurrentResourceThread();
+                ASSERT(IsListEmpty(&Resource->ListLink));
+                InsertTailList(&(PsGetCurrentThread()->OwnedResources), &Resource->ListLink);
+                DPRINT("### Insert Resource %p into thread %p\n", Resource, PsGetCurrentThread());
+                //Resource->Reserved2++;
                 return TRUE;
             }
         }
@@ -841,6 +848,10 @@ TryAcquire:
         Resource->ActiveEntries = 1;
         Resource->ActiveCount = 1;
         Resource->OwnerEntry.OwnerThread = Thread;
+        ASSERT(IsListEmpty(&Resource->ListLink));
+        InsertTailList(&PsGetCurrentThread()->OwnedResources, &Resource->ListLink);
+        DPRINT("### Insert Resource %p into thread %p\n", Resource, PsGetCurrentThread());
+        //Resource->Reserved2++;
         Resource->OwnerEntry.OwnerCount = 1;
         Success = TRUE;
     }
@@ -889,6 +900,7 @@ ExAcquireResourceSharedLite(IN PERESOURCE Resource,
     ERESOURCE_THREAD Thread;
     POWNER_ENTRY Owner = NULL;
     BOOLEAN FirstEntryBusy;
+    DPRINT("[%p] ExAcquireResourceSharedLite(%p, %u)\n", PsGetCurrentProcess(), Resource, Wait);
 
     /* Get the thread */
     Thread = ExGetCurrentResourceThread();
@@ -900,6 +912,8 @@ ExAcquireResourceSharedLite(IN PERESOURCE Resource,
     /* Acquire the lock */
     ExAcquireResourceLock(Resource, &LockHandle);
     ExpCheckForApcsDisabled(LockHandle.OldIrql, Resource, (PKTHREAD)Thread);
+
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
 
     /* Check how many active entries we've got */
     while (Resource->ActiveEntries != 0)
@@ -1066,6 +1080,7 @@ ExAcquireSharedStarveExclusive(IN PERESOURCE Resource,
     KLOCK_QUEUE_HANDLE LockHandle;
     ERESOURCE_THREAD Thread;
     POWNER_ENTRY Owner;
+    DPRINT("[%p] ExAcquireSharedStarveExclusive(%p, %u)\n", PsGetCurrentProcess(), Resource, Wait);
 
     /* Get the thread */
     Thread = ExGetCurrentResourceThread();
@@ -1076,6 +1091,8 @@ ExAcquireSharedStarveExclusive(IN PERESOURCE Resource,
 
     /* Acquire the lock */
     ExAcquireResourceLock(Resource, &LockHandle);
+
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
 
     /* See if anyone owns it */
 TryAcquire:
@@ -1220,6 +1237,7 @@ ExAcquireSharedWaitForExclusive(IN PERESOURCE Resource,
     KLOCK_QUEUE_HANDLE LockHandle;
     ERESOURCE_THREAD Thread;
     POWNER_ENTRY Owner;
+    DPRINT("[%p] ExAcquireSharedWaitForExclusive(%p, %u)\n", PsGetCurrentProcess(), Resource, Wait);
 
     /* Get the thread */
     Thread = ExGetCurrentResourceThread();
@@ -1230,6 +1248,8 @@ ExAcquireSharedWaitForExclusive(IN PERESOURCE Resource,
 
     /* Acquire the lock */
     ExAcquireResourceLock(Resource, &LockHandle);
+
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
 
     /* See if nobody owns us */
 TryAcquire:
@@ -1403,6 +1423,7 @@ ExConvertExclusiveToSharedLite(IN PERESOURCE Resource)
 {
     ULONG OldWaiters;
     KLOCK_QUEUE_HANDLE LockHandle;
+    DPRINT("[%p] ExConvertExclusiveToSharedLite(%p)\n", PsGetCurrentProcess(), Resource);
 
     /* Sanity checks */
     ASSERT(KeIsExecutingDpc() == FALSE);
@@ -1413,8 +1434,12 @@ ExConvertExclusiveToSharedLite(IN PERESOURCE Resource)
     /* Lock the resource */
     ExAcquireResourceLock(Resource, &LockHandle);
 
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
+
     /* Erase the exclusive flag */
     Resource->Flag &= ~ResourceOwnedExclusive;
+    RemoveEntryList(&Resource->ListLink);
+    InitializeListHead(&Resource->ListLink);
 
     /* Check if we have shared waiters */
     if (IsSharedWaiting(Resource))
@@ -1440,7 +1465,7 @@ ExConvertExclusiveToSharedLite(IN PERESOURCE Resource)
  * @implemented NT4
  *
  *     The ExConvertExclusiveToSharedLite routine deletes a given resource
- *     from the system’s resource list.
+ *     from the systemâ€™s resource list.
  *
  * @param Resource
  *        Pointer to the resource to delete.
@@ -1456,6 +1481,7 @@ NTAPI
 ExDeleteResourceLite(IN PERESOURCE Resource)
 {
     KLOCK_QUEUE_HANDLE LockHandle;
+    DPRINT("[%p] ExDeleteResourceLite(%p)\n", PsGetCurrentProcess(), Resource);
 
     /* Sanity checks */
     ASSERT(IsSharedWaiting(Resource) == FALSE);
@@ -1465,6 +1491,12 @@ ExDeleteResourceLite(IN PERESOURCE Resource)
 
     /* Lock the resource */
     KeAcquireInStackQueuedSpinLock(&ExpResourceSpinLock, &LockHandle);
+
+    if (IsOwnedExclusive(Resource))
+    {
+        ASSERT(Resource->OwnerEntry.OwnerThread == ExGetCurrentResourceThread());
+        RemoveEntryList(&Resource->ListLink);
+    }
 
     /* Remove the resource */
     RemoveEntryList(&Resource->SystemResourcesList);
@@ -1582,12 +1614,14 @@ NTAPI
 ExInitializeResourceLite(IN PERESOURCE Resource)
 {
     KLOCK_QUEUE_HANDLE LockHandle;
+    DPRINT("[%p] ExInitializeResourceLite(%p)\n", PsGetCurrentProcess(), Resource);
 
     /* Clear the structure */
     RtlZeroMemory(Resource, sizeof(ERESOURCE));
 
     /* Initialize the lock */
     KeInitializeSpinLock(&Resource->SpinLock);
+    InitializeListHead(&Resource->ListLink);
 
     /* Add it into the system list */
     KeAcquireInStackQueuedSpinLock(&ExpResourceSpinLock, &LockHandle);
@@ -1759,6 +1793,11 @@ ExReinitializeResourceLite(IN PERESOURCE Resource)
     PKSEMAPHORE Semaphore;
     ULONG i, Size;
     POWNER_ENTRY Owner;
+    ASSERT(Resource->ActiveEntries == 0);
+    ASSERT(Resource->ActiveCount == 0);
+    ASSERT(IsListEmpty(&Resource->ListLink));
+    InitializeListHead(&Resource->ListLink);
+    DPRINT("[%p] ExReinitializeResourceLite(%p)\n", PsGetCurrentProcess(), Resource);
 
     /* Get the owner table */
     Owner = Resource->OwnerTable;
@@ -1789,6 +1828,7 @@ ExReinitializeResourceLite(IN PERESOURCE Resource)
 
     /* Clear the resource data */
     Resource->OwnerEntry.OwnerThread = 0;
+    DPRINT("### SetOwner of resource %p to %p\n", Resource, 0);
     Resource->OwnerEntry.OwnerCount = 0;
     Resource->ContentionCount = 0;
     Resource->NumberOfSharedWaiters = 0;
@@ -1849,9 +1889,12 @@ ExReleaseResourceForThreadLite(IN PERESOURCE Resource,
     KLOCK_QUEUE_HANDLE LockHandle;
     POWNER_ENTRY Owner, Limit;
     ASSERT(Thread != 0);
+    DPRINT("[%p] ExReleaseResourceForThreadLite(%p)\n", PsGetCurrentProcess(), Resource);
 
     /* Get the thread and lock the resource */
     ExAcquireResourceLock(Resource, &LockHandle);
+
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
 
     /* Sanity checks */
     ExpVerifyResource(Resource);
@@ -1871,6 +1914,10 @@ ExReleaseResourceForThreadLite(IN PERESOURCE Resource,
 
         /* Clear the owner */
         Resource->OwnerEntry.OwnerThread = 0;
+
+        RemoveEntryList(&Resource->ListLink);
+        InitializeListHead(&Resource->ListLink);
+        DPRINT("### Remove Resource %p from thread %p\n", Resource, PsGetCurrentThread());
 
         /* Decrement the number of active entries */
         ASSERT(Resource->ActiveEntries == 1);
@@ -2048,6 +2095,7 @@ ExSetResourceOwnerPointer(IN PERESOURCE Resource,
     ERESOURCE_THREAD Thread;
     KLOCK_QUEUE_HANDLE LockHandle;
     POWNER_ENTRY Owner, ThisOwner;
+    DPRINT("[%p] ExSetResourceOwnerPointer(%p, %p)\n", PsGetCurrentProcess(), Resource, OwnerPointer);
 
     /* Sanity check */
     ASSERT((OwnerPointer != 0) && (((ULONG_PTR)OwnerPointer & 3) == 3));
@@ -2061,6 +2109,8 @@ ExSetResourceOwnerPointer(IN PERESOURCE Resource,
     /* Lock the resource */
     ExAcquireResourceLock(Resource, &LockHandle);
 
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
+
     /* Check if it's exclusive */
     if (IsOwnedExclusive(Resource))
     {
@@ -2068,6 +2118,7 @@ ExSetResourceOwnerPointer(IN PERESOURCE Resource,
         ASSERT(Resource->OwnerEntry.OwnerThread == Thread);
         ASSERT(Resource->OwnerEntry.OwnerCount > 0);
         Resource->OwnerEntry.OwnerThread = (ULONG_PTR)OwnerPointer;
+        DPRINT("### SetOwner of resource %p to %p\n", Resource, OwnerPointer);
     }
     else
     {
@@ -2131,6 +2182,7 @@ ExTryToAcquireResourceExclusiveLite(IN PERESOURCE Resource)
     ERESOURCE_THREAD Thread;
     KLOCK_QUEUE_HANDLE LockHandle;
     BOOLEAN Acquired = FALSE;
+    DPRINT("[%p] ExSetResourceOwnerPointer(%p)\n", PsGetCurrentProcess(), Resource);
 
     /* Sanity check */
     ASSERT((Resource->Flag & ResourceNeverExclusive) == 0);
@@ -2145,12 +2197,16 @@ ExTryToAcquireResourceExclusiveLite(IN PERESOURCE Resource)
     /* Acquire the lock */
     ExAcquireResourceLock(Resource, &LockHandle);
 
+    ASSERT(!!IsOwnedExclusive(Resource) == !IsListEmpty(&Resource->ListLink));
+
     /* Check if there is an owner */
     if (!Resource->ActiveCount)
     {
         /* No owner, give exclusive access */
         Resource->Flag |= ResourceOwnedExclusive;
         Resource->OwnerEntry.OwnerThread = Thread;
+        InsertTailList(&(PsGetCurrentThread()->OwnedResources), &Resource->ListLink);
+        DPRINT("### Insert Resource %p into thread %p\n", Resource, PsGetCurrentThread());
         Resource->OwnerEntry.OwnerCount = 1;
         Resource->ActiveCount = 1;
         Resource->ActiveEntries = 1;

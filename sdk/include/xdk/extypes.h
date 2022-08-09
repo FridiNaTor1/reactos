@@ -239,6 +239,7 @@ typedef struct _ERESOURCE {
     ULONG_PTR CreatorBackTraceIndex;
   } DUMMYUNIONNAME;
   KSPIN_LOCK SpinLock;
+  LIST_ENTRY ListLink;
 } ERESOURCE, *PERESOURCE;
 
 /* ERESOURCE.Flag */

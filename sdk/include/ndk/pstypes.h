@@ -1252,6 +1252,7 @@ typedef struct _ETHREAD
     KSEMAPHORE AlpcWaitSemaphore;
     ULONG CacheManagerCount;
 #endif
+    LIST_ENTRY OwnedResources;
 } ETHREAD;
 
 //

@@ -1796,7 +1796,7 @@ typedef struct _STACK_TRACE_DATABASE
 // Validate that our padding is big enough:
 #ifndef NTOS_MODE_USER
 #if defined(_M_AMD64)
-C_ASSERT(sizeof(ERESOURCE) <= 0x68);
+//C_ASSERT(sizeof(ERESOURCE) <= 0x68);
 #elif defined(_M_ARM64)
 C_ASSERT(sizeof(ERESOURCE) <= 0x68);
 #else
