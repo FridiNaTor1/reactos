@@ -1392,30 +1392,6 @@ FatUnicodeRestoreShortNameCase(
     ExAcquireResourceSharedLite( &FatData.Resource, BooleanFlagOn((IRPCONTEXT)->Flags, IRP_CONTEXT_FLAG_WAIT) )     \
 )
 
-_Requires_lock_held_(_Global_critical_region_)
-_When_(return != FALSE && NoOpCheck != FALSE, _Acquires_exclusive_lock_(Vcb->Resource))
-FINISHED
-FatAcquireExclusiveVcb_Real(
-    IN PIRP_CONTEXT IrpContext,
-    IN PVCB Vcb,
-    IN BOOLEAN NoOpCheck
-);
-
-PFCB
-FatGetNextFcbBottomUp(
-    IN PIRP_CONTEXT IrpContext,
-    IN PFCB Fcb,
-    IN PFCB TerminationFcb
-);
-
-_Requires_lock_held_(_Global_critical_region_)
-_Acquires_exclusive_lock_(*Fcb->Header.Resource)
-FINISHED
-FatAcquireExclusiveFcb(
-    IN PIRP_CONTEXT IrpContext,
-    IN PFCB Fcb
-);
-
 //
 //  The following macro must only be called when Wait is TRUE!
 //
@@ -1429,20 +1405,14 @@ FatAcquireExclusiveFcb(
 //      IN PVCB Vcb
 //      );
 //
-FORCEINLINE
-void
-FatAcquireExclusiveVolume(
-    PIRP_CONTEXT IrpContext,
-    PVCB Vcb)
-{
-    PFCB Fcb = NULL;
-    NT_ASSERT(FlagOn(IrpContext->Flags, IRP_CONTEXT_FLAG_WAIT));
 
-    NT_VERIFY(FatAcquireExclusiveVcb_Real(IrpContext, Vcb, FALSE));
-    while ((Fcb = FatGetNextFcbBottomUp(IrpContext, Fcb, Vcb->RootDcb)) != NULL)
-    {
-        NT_VERIFY(FatAcquireExclusiveFcb(IrpContext, Fcb));
-    }
+#define FatAcquireExclusiveVolume(IRPCONTEXT,VCB) {                                     \
+    PFCB __FFFFFcb = NULL;                                                                    \
+    NT_ASSERT(FlagOn((IRPCONTEXT)->Flags, IRP_CONTEXT_FLAG_WAIT));                      \
+    (VOID)FatAcquireExclusiveVcb( (IRPCONTEXT), (VCB) );                                \
+    while ( (__FFFFFcb = FatGetNextFcbBottomUp((IRPCONTEXT), __FFFFFcb, (VCB)->RootDcb)) != NULL) { \
+        (VOID)FatAcquireExclusiveFcb((IRPCONTEXT), __FFFFFcb );                               \
+    }                                                                                   \
 }
 
 #define FatReleaseVolume(IRPCONTEXT,VCB) {                                              \

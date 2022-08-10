@@ -48,7 +48,7 @@ KiInitializeHandBuiltThread(
     Thread->Affinity = (ULONG_PTR)1 << Prcb->Number;
     Thread->WaitIrql = DISPATCH_LEVEL;
     Process->ActiveProcessors |= (ULONG_PTR)1 << Prcb->Number;
-    InitializeListHead(&((PETHREAD)Thread)->OwnedResources);
+
 }
 
 CODE_SEG("INIT")

@@ -472,8 +472,6 @@ PspExitThread(IN NTSTATUS ExitStatus)
     CurrentProcess = Thread->ThreadsProcess;
     ASSERT((Thread) == PsGetCurrentThread());
 
-    ASSERT(IsListEmpty(&Thread->OwnedResources));
-
     /* Can't terminate a thread if it attached another process */
     if (KeIsAttachedProcess())
     {

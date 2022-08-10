@@ -1103,7 +1103,7 @@ $include (sspi.h)
 
 /* #if !defined(_X86AMD64_)  FIXME : WHAT ?! */
 #if defined(_WIN64)
-//C_ASSERT(sizeof(ERESOURCE) == 0x68);
+C_ASSERT(sizeof(ERESOURCE) == 0x68);
 C_ASSERT(FIELD_OFFSET(ERESOURCE,ActiveCount) == 0x18);
 C_ASSERT(FIELD_OFFSET(ERESOURCE,Flag) == 0x1a);
 #else
