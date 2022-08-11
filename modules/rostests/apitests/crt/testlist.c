@@ -3,6 +3,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func___C_specific_handler(void);
 #if defined(TEST_MSVCRT)
 extern void func__vscprintf(void);
 extern void func__vscwprintf(void);
@@ -47,6 +48,9 @@ extern void func_crtdata(void);
 
 const struct test winetest_testlist[] =
 {
+#if defined(_M_AMD64)
+    { "__C_specific_handler", func___C_specific_handler },
+#endif
     { "_vsnprintf", func__vsnprintf },
     { "_vsnwprintf", func__vsnwprintf },
     { "mbstowcs", func_mbstowcs },

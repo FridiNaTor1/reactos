@@ -28,7 +28,7 @@ if(ARCH STREQUAL "i386")
     )
 elseif(ARCH STREQUAL "amd64")
     list(APPEND SOURCE_STATIC
-        # To be filled
+        __C_specific_handler.c
     )
 elseif(ARCH STREQUAL "arm")
     list(APPEND SOURCE_STATIC

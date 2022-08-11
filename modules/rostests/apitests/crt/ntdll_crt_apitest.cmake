@@ -145,7 +145,7 @@ if(ARCH STREQUAL "i386")
     )
 elseif(ARCH STREQUAL "amd64")
     list(APPEND SOURCE_NTDLL
-    #    __C_specific_handler
+        __C_specific_handler
     #    _setjmp.c
     #    _setjmpex.c
     #    _local_unwind.c
