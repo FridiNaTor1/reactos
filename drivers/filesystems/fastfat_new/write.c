@@ -73,6 +73,29 @@ FatDeferredFlush (
 #pragma alloc_text(PAGE, FatCommonWrite)
 #endif
 
+typedef enum _SYSDBG_COMMAND
+{
+    Dummy
+} SYSDBG_COMMAND;
+
+NTSTATUS
+NTAPI
+KdSystemDebugControl(
+    _In_ SYSDBG_COMMAND Command,
+    _In_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength,
+    _Inout_ PULONG ReturnLength,
+    _In_ KPROCESSOR_MODE PreviousMode
+);
+
+FORCEINLINE
+ULONG
+CountCurrentThreadResources(VOID)
+{
+    return KdSystemDebugControl(' soR', (PVOID)(ULONG_PTR)999, 0, 0, 0, 0, 0);
+}
 
 _Function_class_(IRP_MJ_WRITE)
 _Function_class_(DRIVER_DISPATCH)
@@ -284,6 +307,8 @@ Return Value:
     NTSTATUS Status = STATUS_SUCCESS;
 
     FAT_IO_CONTEXT StackFatIoContext;
+
+    ULONG ResourceCount = CountCurrentThreadResources();
 
     //
     // A system buffer is only used if we have to access the buffer directly
@@ -2946,8 +2971,10 @@ Return Value:
         }
 
         DebugTrace(-1, Dbg, "FatCommonWrite -> %08lx\n", Status );
-    } _SEH2_END;
+        ASSERT(ResourceCount == CountCurrentThreadResources());
 
+    } _SEH2_END;
+    ASSERT(ResourceCount == CountCurrentThreadResources());
     return Status;
 }
 

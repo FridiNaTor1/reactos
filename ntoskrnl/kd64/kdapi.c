@@ -2144,6 +2144,40 @@ KdDisableDebugger(VOID)
     return KdDisableDebuggerWithLock(TRUE);
 }
 
+ULONG
+CountThreadResources(PETHREAD Thread)
+{
+    PLIST_ENTRY ListEntry;
+    PERESOURCE Resource;
+    ULONG Count = 0;
+
+    for (ListEntry = ExpSystemResourcesList.Flink;
+         ListEntry != &ExpSystemResourcesList;
+         ListEntry = ListEntry->Flink)
+    {
+        Resource = CONTAINING_RECORD(ListEntry, ERESOURCE, SystemResourcesList);
+        if (Resource->OwnerEntry.OwnerThread == (ULONG_PTR)Thread)
+            Count++;
+
+        if (Resource->OwnerTable != NULL)
+        {
+            for (ULONG i = 0; i < Resource->OwnerTable->TableSize; i++)
+            {
+                if (Resource->OwnerTable[i].OwnerThread == (ULONG_PTR)Thread)
+                    Count++;
+            }
+        }
+    }
+
+    return Count;
+}
+
+ULONG
+CountCurrentThreadResources(VOID)
+{
+    return CountThreadResources(PsGetCurrentThread());
+}
+
 /*
  * @unimplemented
  */
@@ -2177,6 +2211,9 @@ KdSystemDebugControl(
                 case 0x24: // KdSpare3:
                     MmDumpArmPfnDatabase(FALSE);
                     break;
+
+                case 999:
+                    return CountCurrentThreadResources();
 
                 default:
                     break;

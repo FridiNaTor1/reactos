@@ -444,6 +444,35 @@ PspDeleteThread(IN PVOID ObjectBody)
     ObDereferenceObject(Process);
 }
 
+VOID
+CheckForInUseResource(PETHREAD Thread)
+{
+    PLIST_ENTRY ListEntry;
+    PERESOURCE Resource;
+
+    for (ListEntry = ExpSystemResourcesList.Flink;
+         ListEntry != &ExpSystemResourcesList;
+         ListEntry = ListEntry->Flink)
+    {
+        Resource = CONTAINING_RECORD(ListEntry, ERESOURCE, SystemResourcesList);
+        ASSERT(Resource->OwnerEntry.OwnerThread != (ULONG_PTR)Thread);
+
+        if (Resource->OwnerTable != NULL)
+        {
+            for (ULONG i = 0; i < Resource->OwnerTable->TableSize; i++)
+            {
+                ASSERT(Resource->OwnerTable[i].OwnerThread != (ULONG_PTR)Thread);
+            }
+        }
+    }
+}
+
+VOID
+CheckCurrentThreadForInUseResource(VOID)
+{
+    CheckForInUseResource(PsGetCurrentThread());
+}
+
 /*
  * FUNCTION: Terminates the current thread
  * See "Windows Internals" - Chapter 13, Page 50-53
@@ -471,6 +500,8 @@ PspExitThread(IN NTSTATUS ExitStatus)
     Thread = PsGetCurrentThread();
     CurrentProcess = Thread->ThreadsProcess;
     ASSERT((Thread) == PsGetCurrentThread());
+
+    CheckForInUseResource(Thread);
 
     /* Can't terminate a thread if it attached another process */
     if (KeIsAttachedProcess())

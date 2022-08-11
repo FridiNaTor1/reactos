@@ -774,6 +774,7 @@ FUNC KiInterruptDispatch
 ENDFUNC
 
 EXTERN KiSystemCallHandler:PROC
+EXTERN CheckCurrentThreadForInUseResource:PROC
 
 /*! \name KiSystemCallEntry64
  *
@@ -845,6 +846,10 @@ GLOBAL_LABEL KiSystemCall64Again
     mov r8, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_R8]
     mov r9, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_R9]
     call rax
+
+    //push rax
+    //call CheckCurrentThreadForInUseResource
+    //pop rax
 
 GLOBAL_LABEL KiSystemServiceExit
 

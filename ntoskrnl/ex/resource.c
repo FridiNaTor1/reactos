@@ -731,6 +731,21 @@ ExpWaitForResource(IN PERESOURCE Resource,
 
 /* FUNCTIONS *****************************************************************/
 
+VOID
+ExpCaptureAcquireBackTrace(PERESOURCE Resource)
+{
+    if (Resource->Address == NULL)
+    {
+        Resource->Address = ExAllocatePool(NonPagedPool, sizeof(PVOID) * 8);
+        if (Resource->Address == NULL)
+        {
+            return;
+        }
+    }
+    RtlZeroMemory(Resource->Address, 8 * sizeof(PVOID));
+    RtlCaptureStackBackTrace(1, 8, Resource->Address, NULL);
+}
+
 /*++
  * @name ExAcquireResourceExclusiveLite
  * @implemented NT4
@@ -828,6 +843,7 @@ TryAcquire:
 
                 /* Set owner and return success */
                 Resource->OwnerEntry.OwnerThread = ExGetCurrentResourceThread();
+                ExpCaptureAcquireBackTrace(Resource);
                 return TRUE;
             }
         }
@@ -842,6 +858,7 @@ TryAcquire:
         Resource->ActiveCount = 1;
         Resource->OwnerEntry.OwnerThread = Thread;
         Resource->OwnerEntry.OwnerCount = 1;
+        ExpCaptureAcquireBackTrace(Resource);
         Success = TRUE;
     }
 
