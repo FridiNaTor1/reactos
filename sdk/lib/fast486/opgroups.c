@@ -55,6 +55,8 @@ Fast486ArithmeticOperation(PFAST486_STATE State,
         /* ADD */
         case 0:
         {
+            SET_MNEMONIC("add");
+
             Result = (FirstValue + SecondValue) & MaxValue;
 
             /* Update CF, OF and AF */
@@ -69,6 +71,8 @@ Fast486ArithmeticOperation(PFAST486_STATE State,
         /* OR */
         case 1:
         {
+            SET_MNEMONIC("or");
+
             Result = FirstValue | SecondValue;
             State->Flags.Cf = State->Flags.Of = FALSE;
             break;
@@ -77,6 +81,8 @@ Fast486ArithmeticOperation(PFAST486_STATE State,
         /* ADC */
         case 2:
         {
+            SET_MNEMONIC("adc");
+
             INT Carry = State->Flags.Cf ? 1 : 0;
 
             Result = (FirstValue + SecondValue + Carry) & MaxValue;
@@ -94,6 +100,8 @@ Fast486ArithmeticOperation(PFAST486_STATE State,
         /* SBB */
         case 3:
         {
+            SET_MNEMONIC("sbb");
+
             INT Carry = State->Flags.Cf ? 1 : 0;
 
             Result = (FirstValue - SecondValue - Carry) & MaxValue;
@@ -112,6 +120,8 @@ Fast486ArithmeticOperation(PFAST486_STATE State,
         /* AND */
         case 4:
         {
+            SET_MNEMONIC("and");
+
             Result = FirstValue & SecondValue;
             State->Flags.Cf = State->Flags.Of = FALSE;
             break;
@@ -121,6 +131,8 @@ Fast486ArithmeticOperation(PFAST486_STATE State,
         case 5:
         case 7:
         {
+            SET_MNEMONIC(Operation == 5 ? "sub" : "cmp");
+
             Result = (FirstValue - SecondValue) & MaxValue;
 
             /* Update CF, OF and AF */
@@ -135,6 +147,8 @@ Fast486ArithmeticOperation(PFAST486_STATE State,
         /* XOR */
         case 6:
         {
+            SET_MNEMONIC("xor");
+
             Result = FirstValue ^ SecondValue;
             State->Flags.Cf = State->Flags.Of = FALSE;
             break;

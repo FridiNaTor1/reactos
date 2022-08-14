@@ -43,6 +43,82 @@ typedef enum
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+
+
+VOID
+PrintOperand(PFAST486_STATE State, PFAST486_OPERAND Operand)
+{
+    const char* RegisterNames[] =
+    {
+        "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi",
+        "ax", "cx", "dx", "bx", "sp", "bp", "si", "di",
+        "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh",
+        "es", "cs", "ss", "ds", "fs", "gs", "??", "??"
+    };
+
+    switch (Operand->Type)
+    {
+        case FAST486_OPERAND_TYPE_NONE:
+            __debugbreak();
+        case FAST486_OPERAND_TYPE_REG:
+            DbgPrint("%s", RegisterNames[Operand->Register]);
+            break;
+        case FAST486_OPERAND_TYPE_IMM:
+            DbgPrint("%lx", Operand->Immediate);
+            break;
+        case FAST486_OPERAND_TYPE_MEMIMM:
+            DbgPrint("[%x]", Operand->Immediate);
+            break;
+        case FAST486_OPERAND_TYPE_MEMREG:
+            DbgPrint("[%s", RegisterNames[Operand->Register]);
+            if (Operand->Scale != 0)
+                DbgPrint(" + %u * %s", Operand->Scale, RegisterNames[Operand->Register2]);
+            if (Operand->Immediate != 0)
+                DbgPrint(" + %lx", Operand->Immediate);
+            DbgPrint("]");
+            
+            break;
+    }
+}
+
+VOID
+Fast486PrintDisasm(PFAST486_STATE State)
+{
+    ULONG i;
+
+    DbgPrint("%08x ", State->SavedCs.Base + State->SavedInstPtr.Long);
+    for (i = 0; i < State->InstLength; i++)
+    {
+        DbgPrint("%02x ", State->InstBuffer[i]);
+    }
+    for (; i < 8; i++)
+    {
+        DbgPrint("   ");
+    }
+
+    DbgPrint("%s", State->PrefixFlags & FAST486_PREFIX_LOCK ? "lock " : "");
+    DbgPrint("%s", State->PrefixFlags & FAST486_PREFIX_REP ? "rep " : "");
+    DbgPrint("%s", State->PrefixFlags & FAST486_PREFIX_REPNZ ? "repne " : "");
+
+    // Print mnemonic
+    DbgPrint("%s", State->Mnemonic);
+
+    // Print operands
+    if (State->Operand[0].Type != FAST486_OPERAND_TYPE_NONE)
+    {
+        DbgPrint(" ");
+        PrintOperand(State, &State->Operand[0]);
+        if (State->Operand[1].Type != FAST486_OPERAND_TYPE_NONE)
+        {
+            DbgPrint(", ");
+            PrintOperand(State, &State->Operand[1]);
+        }
+    }
+    DbgPrint("\n");
+}
+
+BOOL Fast486DoDisasm = FALSE;
+
 FORCEINLINE
 VOID
 FASTCALL
@@ -66,6 +142,14 @@ NextInst:
             {
                 State->SavedInstPtr = State->InstPtr;
                 State->SavedStackPtr = State->GeneralRegs[FAST486_REG_ESP];
+#if 1 // disasm
+                State->Mnemonic = "???";
+                State->SavedCs = State->SegmentRegs[FAST486_REG_CS];
+                State->InstLength = 0;
+                State->Operand[0].Type = FAST486_OPERAND_TYPE_NONE;
+                State->Operand[1].Type = FAST486_OPERAND_TYPE_NONE;
+                State->ModRmFirstOp = 0;
+#endif
             }
 
             /* Perform an instruction fetch */
@@ -84,6 +168,8 @@ NextInst:
 
             /* If this is a prefix, go to the next instruction immediately */
             if (CurrentHandler == Fast486OpcodePrefix) goto NextInst;
+
+            if (Fast486DoDisasm) Fast486PrintDisasm(State);
 
             /* A non-prefix opcode has been executed, reset the prefix flags */
             State->PrefixFlags = 0;

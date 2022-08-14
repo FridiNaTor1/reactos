@@ -413,6 +413,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeIncrement)
     ULONG Value;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("inc");
+    SET_OP_REG(0, Opcode & 0x07);
+
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
 
@@ -444,6 +447,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeDecrement)
     ULONG Value;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("dec");
+    SET_OP_REG(0, Opcode & 0x07);
+
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
 
@@ -472,6 +478,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeDecrement)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodePushReg)
 {
+    SET_MNEMONIC("push");
+    SET_OP_REG(0, Opcode & 0x07);
+
     NO_LOCK_PREFIX();
 
     /* Make sure this is the right instruction */
@@ -485,6 +494,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePopReg)
 {
     ULONG Value;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("pop");
+    SET_OP_REG(0, Opcode & 0x07);
 
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
@@ -502,12 +514,17 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePopReg)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeNop)
 {
+    SET_MNEMONIC("nop");
 }
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeExchangeEax)
 {
     INT Reg = Opcode & 0x07;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("xchg");
+    SET_OP_REGNAME(0, EAX);
+    SET_OP_REG(1, Size ? FAST486_ALLREGS_AX + Reg : Reg);
 
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
@@ -532,6 +549,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeExchangeEax)
         State->GeneralRegs[Reg].LowWord = State->GeneralRegs[FAST486_REG_EAX].LowWord;
         State->GeneralRegs[FAST486_REG_EAX].LowWord = Value;
     }
+
+    State->Mnemonic = "xchg";
 }
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
@@ -558,6 +577,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 0:
         {
             Jump = State->Flags.Of;
+            SET_MNEMONIC((Opcode & 1) ? "jno" : "jo");
             break;
         }
 
@@ -565,6 +585,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 1:
         {
             Jump = State->Flags.Cf;
+            SET_MNEMONIC((Opcode & 1) ? "jnc" : "jc");
             break;
         }
 
@@ -572,6 +593,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 2:
         {
             Jump = State->Flags.Zf;
+            SET_MNEMONIC((Opcode & 1) ? "jnz" : "jz");
             break;
         }
 
@@ -579,6 +601,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 3:
         {
             Jump = State->Flags.Cf || State->Flags.Zf;
+            SET_MNEMONIC((Opcode & 1) ? "jnbe" : "jbe");
             break;
         }
 
@@ -586,6 +609,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 4:
         {
             Jump = State->Flags.Sf;
+            SET_MNEMONIC((Opcode & 1) ? "jns" : "js");
             break;
         }
 
@@ -593,6 +617,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 5:
         {
             Jump = State->Flags.Pf;
+            SET_MNEMONIC((Opcode & 1) ? "jnp" : "jp");
             break;
         }
 
@@ -600,6 +625,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 6:
         {
             Jump = State->Flags.Sf != State->Flags.Of;
+            SET_MNEMONIC((Opcode & 1) ? "jnl" : "jl");
             break;
         }
 
@@ -607,6 +633,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
         case 7:
         {
             Jump = (State->Flags.Sf != State->Flags.Of) || State->Flags.Zf;
+            SET_MNEMONIC((Opcode & 1) ? "jnle" : "jle");
             break;
         }
     }
@@ -628,12 +655,16 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortConditionalJmp)
             State->InstPtr.Long &= 0xFFFF;
         }
     }
+
+    SET_OP_IMM(0, State->InstPtr.Long + Offset);
 }
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeClearCarry)
 {
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xF8);
+
+    SET_MNEMONIC("clc");
 
     NO_LOCK_PREFIX();
 
@@ -646,6 +677,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSetCarry)
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xF9);
 
+    SET_MNEMONIC("stc");
+
     NO_LOCK_PREFIX();
 
     /* Set CF and return success*/
@@ -656,6 +689,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeComplCarry)
 {
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xF5);
+
+    SET_MNEMONIC("cmc");
 
     NO_LOCK_PREFIX();
 
@@ -668,6 +703,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeClearInt)
 {
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xFA);
+
+    SET_MNEMONIC("cli");
 
     NO_LOCK_PREFIX();
 
@@ -699,6 +736,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSetInt)
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xFB);
 
+    SET_MNEMONIC("sti");
+
     NO_LOCK_PREFIX();
 
     /* Check for protected mode */
@@ -729,6 +768,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeClearDir)
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xFC);
 
+    SET_MNEMONIC("cld");
+
     NO_LOCK_PREFIX();
 
     /* Clear DF */
@@ -740,6 +781,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSetDir)
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xFD);
 
+    SET_MNEMONIC("std");
+
     NO_LOCK_PREFIX();
 
     /* Set DF */
@@ -750,6 +793,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeHalt)
 {
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xF4);
+
+    SET_MNEMONIC("hlt");
 
     NO_LOCK_PREFIX();
 
@@ -772,6 +817,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeInByte)
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xF7) == 0xE4);
 
+    SET_MNEMONIC("in");
+    SET_OP_REG(1, FAST486_ALLREGS_AL);
+
     if (Opcode == 0xE4)
     {
         /* Fetch the parameter */
@@ -783,11 +831,13 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeInByte)
 
         /* Set the port number to the parameter */
         Port = Data;
+        SET_OP_IMM(0, Data);
     }
     else
     {
         /* The port number is in DX */
         Port = State->GeneralRegs[FAST486_REG_EDX].LowWord;
+        SET_OP_REG(0, FAST486_ALLREGS_DX);
     }
 
     if (!Fast486IoPrivilegeCheck(State, Port)) return;
@@ -807,6 +857,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeIn)
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xF7) == 0xE5);
 
+    SET_MNEMONIC("in");
+    SET_OP_REG(1, FAST486_ALLREGS_AX);
+
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
 
@@ -823,11 +876,13 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeIn)
 
         /* Set the port number to the parameter */
         Port = Data;
+        SET_OP_IMM(0, Data);
     }
     else
     {
         /* The port number is in DX */
         Port = State->GeneralRegs[FAST486_REG_EDX].LowWord;
+        SET_OP_REG(0, FAST486_ALLREGS_DX);
     }
 
     if (!Fast486IoPrivilegeCheck(State, Port)) return;
@@ -862,6 +917,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOutByte)
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xF7) == 0xE6);
 
+    SET_MNEMONIC("out");
+    SET_OP_REG(1, FAST486_ALLREGS_AL);
+
     if (Opcode == 0xE6)
     {
         /* Fetch the parameter */
@@ -873,11 +931,13 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOutByte)
 
         /* Set the port number to the parameter */
         Port = Data;
+        SET_OP_IMM(0, Data);
     }
     else
     {
         /* The port number is in DX */
         Port = State->GeneralRegs[FAST486_REG_EDX].LowWord;
+        SET_OP_REG(0, FAST486_ALLREGS_DX);
     }
 
     if (!Fast486IoPrivilegeCheck(State, Port)) return;
@@ -897,6 +957,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOut)
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xF7) == 0xE7);
 
+    SET_MNEMONIC("out");
+    SET_OP_REG(1, FAST486_ALLREGS_AX);
+
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
 
@@ -913,11 +976,13 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOut)
 
         /* Set the port number to the parameter */
         Port = Data;
+        SET_OP_IMM(0, Data);
     }
     else
     {
         /* The port number is in DX */
         Port = State->GeneralRegs[FAST486_REG_EDX].LowWord;
+        SET_OP_REG(0, FAST486_ALLREGS_DX);
     }
 
     if (!Fast486IoPrivilegeCheck(State, Port)) return;
@@ -945,6 +1010,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortJump)
     CHAR Offset = 0;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("jmp");
+
     TOGGLE_OPSIZE(Size);
 
     /* Make sure this is the right instruction */
@@ -959,6 +1026,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeShortJump)
 
     /* Move the instruction pointer */
     State->InstPtr.Long += Offset;
+    SET_OP_IMM(0, State->InstPtr.Long + Offset);
 
     if (!Size)
     {
@@ -974,6 +1042,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovRegImm)
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xF8) == 0xB8);
 
+    SET_MNEMONIC("mov");
+
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
 
@@ -988,8 +1058,11 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovRegImm)
             return;
         }
 
+        SET_OP_IMM(1, Value);
+
         /* Store the value in the register */
         State->GeneralRegs[Opcode & 0x07].Long = Value;
+        SET_OP_REG(0, FAST486_ALLREGS_EAX + (Opcode & 0x07));
     }
     else
     {
@@ -1004,6 +1077,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovRegImm)
 
         /* Store the value in the register */
         State->GeneralRegs[Opcode & 0x07].LowWord = Value;
+        SET_OP_REG(0, FAST486_ALLREGS_AX + (Opcode & 0x07));
     }
 }
 
@@ -1014,6 +1088,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovByteRegImm)
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xF8) == 0xB0);
 
+    SET_MNEMONIC("mov");
+    SET_OP_REG(0, FAST486_ALLREGS_AL + (Opcode & 0x07));
+
     NO_LOCK_PREFIX();
 
     /* Fetch the byte */
@@ -1022,6 +1099,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovByteRegImm)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, Value);
 
     if (Opcode & 0x04)
     {
@@ -1044,6 +1123,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddByteModrm)
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x00);
 
+    SET_MNEMONIC("add");
+
     TOGGLE_ADSIZE(AddressSize);
 
     /* Get the operands */
@@ -1052,6 +1133,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -1085,6 +1168,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("add");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x01);
@@ -1171,6 +1256,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddAl)
     UCHAR FirstValue = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     UCHAR SecondValue, Result;
 
+    SET_MNEMONIC("add");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x04);
 
@@ -1181,6 +1269,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue + SecondValue;
@@ -1202,6 +1292,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddEax)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("add");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x05);
 
@@ -1218,6 +1311,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, SecondValue);
 
         /* Calculate the result */
         Result = FirstValue + SecondValue;
@@ -1245,6 +1340,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAddEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue + SecondValue;
 
@@ -1268,6 +1365,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrByteModrm)
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("or");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x08);
 
@@ -1279,6 +1378,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -1310,6 +1411,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("or");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x09);
@@ -1392,6 +1495,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrAl)
     UCHAR FirstValue = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     UCHAR SecondValue, Result;
 
+    SET_MNEMONIC("or");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x0C);
 
@@ -1402,6 +1508,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue | SecondValue;
@@ -1421,6 +1529,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrEax)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("or");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x0D);
 
@@ -1437,6 +1548,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, SecondValue);
 
         /* Calculate the result */
         Result = FirstValue | SecondValue;
@@ -1462,6 +1575,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOrEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue | SecondValue;
 
@@ -1483,6 +1598,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndByteModrm)
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("and");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x20);
 
@@ -1494,6 +1611,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -1525,6 +1644,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("or");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x21);
@@ -1600,12 +1721,17 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndModrm)
                                        Opcode & FAST486_OPCODE_WRITE_REG,
                                        Result);
     }
+
+    State->Mnemonic = "and";
 }
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeAndAl)
 {
     UCHAR FirstValue = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     UCHAR SecondValue, Result;
+
+    SET_MNEMONIC("and");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x24);
@@ -1617,6 +1743,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue & SecondValue;
@@ -1636,6 +1764,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndEax)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("and");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x25);
 
@@ -1652,6 +1783,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, SecondValue);
 
         /* Calculate the result */
         Result = FirstValue & SecondValue;
@@ -1677,6 +1810,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAndEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue & SecondValue;
 
@@ -1698,6 +1833,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorByteModrm)
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("xor");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x30);
 
@@ -1709,6 +1846,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -1740,6 +1879,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("xor");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x31);
@@ -1822,6 +1963,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorAl)
     UCHAR FirstValue = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     UCHAR SecondValue, Result;
 
+    SET_MNEMONIC("xor");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x34);
 
@@ -1832,6 +1976,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue ^ SecondValue;
@@ -1845,11 +1991,16 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorAl)
 
     /* Write back the result */
     State->GeneralRegs[FAST486_REG_EAX].LowByte = Result;
+
+    State->Mnemonic = "xor";
 }
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeXorEax)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("xor");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x35);
@@ -1867,6 +2018,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, SecondValue);
 
         /* Calculate the result */
         Result = FirstValue ^ SecondValue;
@@ -1892,6 +2045,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue ^ SecondValue;
 
@@ -1905,6 +2060,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXorEax)
         /* Write back the result */
         State->GeneralRegs[FAST486_REG_EAX].LowWord = Result;
     }
+
+    State->Mnemonic = "xor";
 }
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeTestByteModrm)
@@ -1912,6 +2069,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestByteModrm)
     UCHAR FirstValue, SecondValue, Result;
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("test");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x84);
@@ -1924,6 +2083,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -1948,6 +2109,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("test");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x85);
@@ -2018,6 +2181,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestAl)
     UCHAR FirstValue = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     UCHAR SecondValue, Result;
 
+    SET_MNEMONIC("test");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xA8);
 
@@ -2028,6 +2194,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue & SecondValue;
@@ -2043,6 +2211,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestAl)
 FAST486_OPCODE_HANDLER(Fast486OpcodeTestEax)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("test");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xA9);
@@ -2061,6 +2232,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+ 
         /* Calculate the result */
         Result = FirstValue & SecondValue;
 
@@ -2082,6 +2255,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeTestEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue & SecondValue;
 
@@ -2100,6 +2275,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXchgByteModrm)
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("xchg");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x86);
 
@@ -2111,6 +2288,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXchgByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -2142,6 +2321,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXchgModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("xchg");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x87);
@@ -2221,6 +2402,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXchgModrm)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodePushEs)
 {
+    SET_MNEMONIC("push");
+    SET_OP_REG(0, FAST486_ALLREGS_ES);
+
     /* Call the internal API */
     Fast486StackPush(State, State->SegmentRegs[FAST486_REG_ES].Selector);
 }
@@ -2228,6 +2412,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushEs)
 FAST486_OPCODE_HANDLER(Fast486OpcodePopEs)
 {
     ULONG NewSelector;
+
+    SET_MNEMONIC("pop");
+    SET_OP_REG(0, FAST486_ALLREGS_ES);
 
     if (!Fast486StackPop(State, &NewSelector))
     {
@@ -2241,6 +2428,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePopEs)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodePushCs)
 {
+    SET_MNEMONIC("push");
+    SET_OP_REG(0, FAST486_ALLREGS_CS);
+
     /* Call the internal API */
     Fast486StackPush(State, State->SegmentRegs[FAST486_REG_CS].Selector);
 }
@@ -2250,6 +2440,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcByteModrm)
     UCHAR FirstValue, SecondValue, Result;
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("adc");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x10);
@@ -2262,6 +2454,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -2299,6 +2493,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("adc");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x11);
@@ -2386,13 +2582,15 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcModrm)
                                        Opcode & FAST486_OPCODE_WRITE_REG,
                                        Result);
     }
-
 }
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeAdcAl)
 {
     UCHAR FirstValue = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     UCHAR SecondValue, Result;
+
+    SET_MNEMONIC("adc");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x14);
@@ -2404,6 +2602,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue + SecondValue + State->Flags.Cf;
@@ -2429,6 +2629,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcEax)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("adc");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x15);
 
@@ -2445,6 +2648,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, SecondValue);
 
         /* Calculate the result */
         Result = FirstValue + SecondValue + State->Flags.Cf;
@@ -2476,6 +2681,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue + SecondValue + State->Flags.Cf;
 
@@ -2499,6 +2706,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAdcEax)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodePushSs)
 {
+    SET_MNEMONIC("push");
+    SET_OP_REG(0, FAST486_ALLREGS_SS);
+
     /* Call the internal API */
     Fast486StackPush(State, State->SegmentRegs[FAST486_REG_SS].Selector);
 }
@@ -2506,6 +2716,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushSs)
 FAST486_OPCODE_HANDLER(Fast486OpcodePopSs)
 {
     ULONG NewSelector;
+
+    SET_MNEMONIC("pop");
+    SET_OP_REG(0, FAST486_ALLREGS_SS);
 
     if (!Fast486StackPop(State, &NewSelector))
     {
@@ -2528,6 +2741,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbByteModrm)
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
     INT Carry = State->Flags.Cf ? 1 : 0;
 
+    SET_MNEMONIC("sbb");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x18);
 
@@ -2539,6 +2754,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -2580,6 +2797,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbModrm)
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
     INT Carry = State->Flags.Cf ? 1 : 0;
+
+    SET_MNEMONIC("abb");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x19);
@@ -2681,6 +2900,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbAl)
     UCHAR SecondValue, Result;
     INT Carry = State->Flags.Cf ? 1 : 0;
 
+    SET_MNEMONIC("sbb");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x1C);
 
@@ -2691,6 +2913,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue - SecondValue - Carry;
@@ -2713,6 +2937,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbEax)
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
     INT Carry = State->Flags.Cf ? 1 : 0;
 
+    SET_MNEMONIC("sbb");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x1D);
 
@@ -2729,6 +2956,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, SecondValue);
 
         /* Calculate the result */
         Result = FirstValue - SecondValue - Carry;
@@ -2756,6 +2985,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue - SecondValue - Carry;
 
@@ -2775,6 +3006,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSbbEax)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodePushDs)
 {
+    SET_MNEMONIC("push");
+    SET_OP_REG(0, FAST486_ALLREGS_DS);
+
     /* Call the internal API */
     Fast486StackPush(State, State->SegmentRegs[FAST486_REG_DS].Selector);
 }
@@ -2782,6 +3016,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushDs)
 FAST486_OPCODE_HANDLER(Fast486OpcodePopDs)
 {
     ULONG NewSelector;
+
+    SET_MNEMONIC("pop");
+    SET_OP_REG(0, FAST486_ALLREGS_DS);
 
     if (!Fast486StackPop(State, &NewSelector))
     {
@@ -2797,6 +3034,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeDaa)
 {
     UCHAR Value = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     BOOLEAN Carry = State->Flags.Cf;
+
+    SET_MNEMONIC("daa");
 
     /* Clear the carry flag */
     State->Flags.Cf = FALSE;
@@ -2840,6 +3079,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubByteModrm)
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC((Opcode & 0x10) ? "cmp" : "sub");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xED) == 0x28);
 
@@ -2851,6 +3092,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (!Fast486ReadModrmByteOperands(State,
                                       &ModRegRm,
@@ -2895,6 +3138,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC((Opcode & 0x10) ? "cmp" : "sub");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xED) == 0x29);
@@ -3003,6 +3248,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubAl)
     UCHAR FirstValue = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     UCHAR SecondValue, Result;
 
+    SET_MNEMONIC((Opcode & 0x10) ? "cmp" : "sub");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xEF) == 0x2C);
 
@@ -3013,6 +3261,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubAl)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, SecondValue);
 
     /* Calculate the result */
     Result = FirstValue - SecondValue;
@@ -3038,6 +3288,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubEax)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC((Opcode & 0x10) ? "cmp" : "sub");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xEF) == 0x2D);
 
@@ -3054,6 +3307,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, SecondValue);
 
         /* Calculate the result */
         Result = FirstValue - SecondValue;
@@ -3085,6 +3340,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmpSubEax)
             return;
         }
 
+        SET_OP_IMM(1, SecondValue);
+
         /* Calculate the result */
         Result = FirstValue - SecondValue;
 
@@ -3110,6 +3367,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeDas)
 {
     UCHAR Value = State->GeneralRegs[FAST486_REG_EAX].LowByte;
     BOOLEAN Carry = State->Flags.Cf;
+
+    SET_MNEMONIC("das");
 
     /* Clear the carry flag */
     State->Flags.Cf = FALSE;
@@ -3151,6 +3410,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAaa)
 {
     UCHAR Value = State->GeneralRegs[FAST486_REG_EAX].LowByte;
 
+    SET_MNEMONIC("aaa");
+
     /*
      * Check if the value in AL is not a valid BCD digit,
      * or there was a carry from the lowest 4 bits of AL
@@ -3177,6 +3438,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAaa)
 FAST486_OPCODE_HANDLER(Fast486OpcodeAas)
 {
     UCHAR Value = State->GeneralRegs[FAST486_REG_EAX].LowByte;
+
+    SET_MNEMONIC("aas");
 
     /*
      * Check if the value in AL is not a valid BCD digit,
@@ -3206,6 +3469,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushAll)
     INT i;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
     FAST486_REG SavedEsp = State->GeneralRegs[FAST486_REG_ESP];
+
+    SET_MNEMONIC("pusha");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x60);
@@ -3244,6 +3509,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePopAll)
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
     ULONG Value;
 
+    SET_MNEMONIC("popa");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x61);
 
@@ -3274,6 +3541,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeBound)
     BOOLEAN OperandSize, AddressSize;
     FAST486_MOD_REG_RM ModRegRm;
     FAST486_SEG_REGS Segment = FAST486_REG_DS;
+
+    SET_MNEMONIC("bound");
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
@@ -3371,6 +3640,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeArpl)
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("arpl");
+
     if (!(State->ControlRegisters[FAST486_REG_CR0] & FAST486_CR0_PE)
         || State->Flags.Vm
         || (State->PrefixFlags & FAST486_PREFIX_LOCK))
@@ -3423,6 +3694,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushImm)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("push");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x68);
 
@@ -3439,6 +3712,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushImm)
             return;
         }
 
+        SET_OP_IMM(1, Data);
+
         /* Call the internal API */
         Fast486StackPush(State, Data);
     }
@@ -3452,6 +3727,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushImm)
             return;
         }
 
+        SET_OP_IMM(1, Data);
+
         /* Call the internal API */
         Fast486StackPush(State, Data);
     }
@@ -3462,6 +3739,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeImulModrmImm)
     BOOLEAN OperandSize, AddressSize;
     FAST486_MOD_REG_RM ModRegRm;
     LONG Multiplier;
+
+    SET_MNEMONIC("imul?");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x69);
@@ -3489,6 +3768,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeImulModrmImm)
             return;
         }
 
+        SET_OP_IMM(1, Byte);
+
         Multiplier = (LONG)Byte;
     }
     else
@@ -3504,6 +3785,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeImulModrmImm)
                 return;
             }
 
+            SET_OP_IMM(1, Dword);
+
             Multiplier = Dword;
         }
         else
@@ -3516,6 +3799,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeImulModrmImm)
                 /* Exception occurred */
                 return;
             }
+
+            SET_OP_IMM(1, Word);
 
             Multiplier = (LONG)Word;
         }
@@ -3583,6 +3868,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushByteImm)
 {
     CHAR Data;
 
+    SET_MNEMONIC("push");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x6A);
 
@@ -3591,6 +3878,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePushByteImm)
         /* Exception occurred */
         return;
     }
+
+    SET_OP_IMM(1, Data);
 
     /* Call the internal API */
     Fast486StackPush(State, Data);
@@ -3601,6 +3890,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovByteModrm)
     UCHAR Result;
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("mov");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x88);
@@ -3613,6 +3904,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovByteModrm)
         /* Exception occurred */
         return;
     }
+
+    ADJUST_OP_TO_BYTE(0);
 
     if (Opcode & FAST486_OPCODE_WRITE_REG)
     {
@@ -3642,6 +3935,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovModrm)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("mov?");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFD) == 0x89);
@@ -3722,6 +4017,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovStoreSeg)
     BOOLEAN OperandSize, AddressSize;
     FAST486_MOD_REG_RM ModRegRm;
 
+    SET_MNEMONIC("mov?");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x8C);
 
@@ -3765,6 +4062,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeLea)
 {
     FAST486_MOD_REG_RM ModRegRm;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("lea");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x8D);
@@ -3813,6 +4112,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovLoadSeg)
     FAST486_MOD_REG_RM ModRegRm;
     USHORT Selector;
 
+    SET_MNEMONIC("mov");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x8E);
 
@@ -3824,6 +4125,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovLoadSeg)
         /* Exception occurred */
         return;
     }
+
+    State->Operand[0].Register += FAST486_ALLREGS_ES;
 
     if ((ModRegRm.Register >= FAST486_NUM_SEG_REGS)
         || ((FAST486_SEG_REGS)ModRegRm.Register == FAST486_REG_CS))
@@ -3856,6 +4159,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCwde)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("cwde");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x98);
 
@@ -3885,6 +4190,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCdq)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("cdq");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x99);
 
@@ -3913,12 +4220,14 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCallAbs)
     ULONG Offset = 0;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("call");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x9A);
 
     TOGGLE_OPSIZE(Size);
     NO_LOCK_PREFIX();
-
+ 
     /* Fetch the offset */
     if (Size)
     {
@@ -3927,6 +4236,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCallAbs)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, Offset);
     }
     else
     {
@@ -3935,6 +4246,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCallAbs)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, Offset);
     }
 
     /* Fetch the segment */
@@ -3981,6 +4294,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCallAbs)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeWait)
 {
+    SET_MNEMONIC("wait");
 #ifndef FAST486_NO_FPU
     Fast486FpuExceptionCheck(State);
 #endif
@@ -3989,6 +4303,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeWait)
 FAST486_OPCODE_HANDLER(Fast486OpcodePushFlags)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("pushf");
 
     NO_LOCK_PREFIX();
     TOGGLE_OPSIZE(Size);
@@ -4011,6 +4327,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePopFlags)
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
     UINT Cpl = Fast486GetCurrentPrivLevel(State);
     FAST486_FLAGS_REG NewFlags;
+
+    SET_MNEMONIC("popf");
 
     NO_LOCK_PREFIX();
     TOGGLE_OPSIZE(Size);
@@ -4047,6 +4365,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodePopFlags)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeSahf)
 {
+    SET_MNEMONIC("sahf");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x9E);
 
@@ -4061,6 +4381,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSahf)
 
 FAST486_OPCODE_HANDLER(Fast486OpcodeLahf)
 {
+    SET_MNEMONIC("lahf");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0x9F);
 
@@ -4074,6 +4396,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeRet)
     USHORT BytesToPop = 0;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
 
+    SET_MNEMONIC("ret");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFE) == 0xC2);
 
@@ -4084,6 +4408,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeRet)
     {
         /* Fetch the number of bytes to pop after the return */
         if (!Fast486FetchWord(State, &BytesToPop)) return;
+        SET_OP_IMM(0, BytesToPop);
     }
 
     /* Pop the return address */
@@ -4107,6 +4432,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeLdsLes)
     UCHAR FarPointer[6];
     BOOLEAN OperandSize, AddressSize;
     FAST486_MOD_REG_RM ModRegRm;
+
+    SET_MNEMONIC(Opcode == 0xc4 ? "les" : "lds");
 
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFE) == 0xC4);
@@ -4214,6 +4541,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeEnter)
     UCHAR NestingLevel;
     FAST486_REG FramePointer;
 
+    SET_MNEMONIC("enter");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xC8);
 
@@ -4279,6 +4608,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeLeave)
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
     ULONG Value;
 
+    SET_MNEMONIC("leave");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xC9);
 
@@ -4314,6 +4645,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeRetFar)
     ULONG StackSel;
     UCHAR OldCpl = Fast486GetCurrentPrivLevel(State);
 
+    SET_MNEMONIC("retf");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode & 0xFE) == 0xCA);
 
@@ -4324,6 +4657,7 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeRetFar)
     {
         /* Fetch the number of bytes to pop after the return */
         if (!Fast486FetchWord(State, &BytesToPop)) return;
+        SET_OP_IMM(0, BytesToPop);
     }
 
     /* Pop the offset */
@@ -4423,6 +4757,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeInt)
 {
     UCHAR IntNum;
 
+    SET_MNEMONIC("int");
+
     /* Check for V86 mode */
     if (State->Flags.Vm && (State->Flags.Iopl != 3))
     {
@@ -4470,6 +4806,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeInt)
         }
     }
 
+    SET_OP_IMM(0, IntNum);
+
     /* Perform the interrupt */
     Fast486PerformInterrupt(State, IntNum);
 }
@@ -4480,6 +4818,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeIret)
     ULONG InstPtr, CodeSel, StackPtr, StackSel;
     FAST486_FLAGS_REG NewFlags;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("iret");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xCF);
@@ -4703,6 +5043,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAam)
     UCHAR Base;
     UCHAR Value = State->GeneralRegs[FAST486_REG_EAX].LowByte;
 
+    SET_MNEMONIC("aam?");
+
     NO_LOCK_PREFIX();
 
     /* Fetch the base */
@@ -4736,6 +5078,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeAad)
     UCHAR Base;
     UCHAR Value = State->GeneralRegs[FAST486_REG_EAX].LowByte;
 
+    SET_MNEMONIC("aad?");
+
     NO_LOCK_PREFIX();
 
     /* Fetch the base */
@@ -4760,6 +5104,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeXlat)
 {
     UCHAR Value;
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("xlat");
 
     TOGGLE_ADSIZE(AddressSize);
 
@@ -4788,6 +5134,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeLoop)
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
     CHAR Offset = 0;
 
+    SET_MNEMONIC("loop");
+
     /* Make sure this is the right instruction */
     ASSERT((Opcode >= 0xE0) && (Opcode <= 0xE2));
 
@@ -4815,6 +5163,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeLoop)
         return;
     }
 
+    SET_OP_IMM(0, State->InstPtr.Long + Offset);
+
     if (Condition)
     {
         /* Move the instruction pointer */
@@ -4828,6 +5178,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeJecxz)
     BOOLEAN Condition;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
     CHAR Offset = 0;
+
+    SET_MNEMONIC("jcxz");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xE3);
@@ -4845,6 +5197,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeJecxz)
         return;
     }
 
+    SET_OP_IMM(0, State->InstPtr.Long + Offset);
+
     if (Condition)
     {
         /* Move the instruction pointer */
@@ -4856,6 +5210,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeJecxz)
 FAST486_OPCODE_HANDLER(Fast486OpcodeCall)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("call");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xE8);
@@ -4874,6 +5230,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCall)
             return;
         }
 
+        SET_OP_IMM(0, State->InstPtr.Long + Offset);
+
         /* Push the current value of the instruction pointer */
         if (!Fast486StackPush(State, State->InstPtr.Long))
         {
@@ -4895,6 +5253,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCall)
             return;
         }
 
+        SET_OP_IMM(0, State->InstPtr.Long + Offset);
+
         /* Push the current value of the instruction pointer */
         if (!Fast486StackPush(State, State->InstPtr.Long))
         {
@@ -4910,6 +5270,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCall)
 FAST486_OPCODE_HANDLER(Fast486OpcodeJmp)
 {
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("jmp");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xE9);
@@ -4928,6 +5290,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeJmp)
             return;
         }
 
+        SET_OP_IMM(0, State->InstPtr.Long + Offset);
+
         /* Move the instruction pointer */
         State->InstPtr.Long += Offset;
     }
@@ -4942,6 +5306,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeJmp)
             return;
         }
 
+        SET_OP_IMM(0, State->InstPtr.Long + Offset);
+
         /* Move the instruction pointer */
         State->InstPtr.Long += Offset;
 
@@ -4955,6 +5321,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeJmpAbs)
     USHORT Segment = 0;
     ULONG Offset = 0;
     BOOLEAN Size = State->SegmentRegs[FAST486_REG_CS].Size;
+
+    SET_MNEMONIC("jmp");
 
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xEA);
@@ -4979,6 +5347,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeJmpAbs)
             return;
         }
     }
+
+    SET_OP_IMM(0, State->InstPtr.Long + Offset);
 
     /* Fetch the segment */
     if (!Fast486FetchWord(State, &Segment))
@@ -5012,6 +5382,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovAlOffset)
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
     ULONG Offset;
 
+    SET_MNEMONIC("mov");
+    SET_OP_REG(0, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xA0);
 
@@ -5038,6 +5411,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovAlOffset)
         Offset = (ULONG)WordOffset;
     }
 
+    SET_OP_IMM(1, Offset);
+
     /* Read from memory */
     Fast486ReadMemory(State,
                       (State->PrefixFlags & FAST486_PREFIX_SEG) ?
@@ -5051,6 +5426,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovAlOffset)
 FAST486_OPCODE_HANDLER(Fast486OpcodeMovEaxOffset)
 {
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("mov");
+    SET_OP_REG(0, FAST486_ALLREGS_EAX);
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
@@ -5069,6 +5447,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovEaxOffset)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, Offset);
 
         /* Read from memory */
         if (OperandSize)
@@ -5101,6 +5481,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovEaxOffset)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_IMM(1, Offset);
 
         /* Read from memory */
         if (OperandSize)
@@ -5131,6 +5513,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovOffsetAl)
     BOOLEAN AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
     ULONG Offset;
 
+    SET_MNEMONIC("mov?");
+    SET_OP_REG(1, FAST486_ALLREGS_AL);
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xA2);
 
@@ -5157,6 +5542,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovOffsetAl)
         Offset = (ULONG)WordOffset;
     }
 
+    SET_OP_MEMIMM(0, Offset);
+
     /* Write to memory */
     Fast486WriteMemory(State,
                       (State->PrefixFlags & FAST486_PREFIX_SEG) ?
@@ -5169,6 +5556,9 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovOffsetAl)
 FAST486_OPCODE_HANDLER(Fast486OpcodeMovOffsetEax)
 {
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("mov");
+    SET_OP_REG(1, FAST486_ALLREGS_EAX);
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
@@ -5187,6 +5577,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovOffsetEax)
             /* Exception occurred */
             return;
         }
+
+        SET_OP_MEMIMM(0, Offset);
 
         /* Write to memory */
         if (OperandSize)
@@ -5218,6 +5610,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovOffsetEax)
             return;
         }
 
+        SET_OP_MEMIMM(0, Offset);
+
         /* Write to memory */
         if (OperandSize)
         {
@@ -5247,6 +5641,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeSalc)
      * for more information.
      */
 
+    SET_MNEMONIC("salc");
+
     /* Make sure this is the right instruction */
     ASSERT(Opcode == 0xD6);
 
@@ -5261,6 +5657,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeMovs)
     ULONG Data, DataSize;
     BOOLEAN OperandSize, AddressSize;
     FAST486_SEG_REGS Segment = FAST486_REG_DS;
+
+    SET_MNEMONIC("movs");
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
@@ -5371,6 +5769,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeCmps)
     ULONG DataSize, DataMask, SignFlag;
     BOOLEAN OperandSize, AddressSize;
     FAST486_SEG_REGS Segment = FAST486_REG_DS;
+
+    SET_MNEMONIC("cmps");
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
@@ -5516,6 +5916,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeStos)
     ULONG DataSize;
     BOOLEAN OperandSize, AddressSize;
 
+    SET_MNEMONIC("stos");
+
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
     /* Make sure this is the right instruction */
@@ -5650,6 +6052,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeLods)
     BOOLEAN OperandSize, AddressSize;
     FAST486_SEG_REGS Segment = FAST486_REG_DS;
 
+    SET_MNEMONIC("lods");
+
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
     /* Make sure this is the right instruction */
@@ -5726,6 +6130,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeScas)
     ULONG Result;
     ULONG DataSize, DataMask, SignFlag;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("scas");
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
@@ -5835,6 +6241,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeIns)
 {
     ULONG DataSize;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("ins");
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 
@@ -5975,6 +6383,8 @@ FAST486_OPCODE_HANDLER(Fast486OpcodeOuts)
 {
     ULONG DataSize;
     BOOLEAN OperandSize, AddressSize;
+
+    SET_MNEMONIC("outs");
 
     OperandSize = AddressSize = State->SegmentRegs[FAST486_REG_CS].Size;
 

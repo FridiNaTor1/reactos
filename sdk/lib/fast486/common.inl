@@ -899,6 +899,10 @@ Fast486FetchByte(PFAST486_STATE State,
     if (CachedDescriptor->Size) State->InstPtr.Long++;
     else State->InstPtr.LowWord++;
 
+#if 1 // disasm
+    State->InstBuffer[State->InstLength++] = *Data;
+#endif
+
     return TRUE;
 }
 
@@ -949,6 +953,11 @@ Fast486FetchWord(PFAST486_STATE State,
     /* Advance the instruction pointer */
     if (CachedDescriptor->Size) State->InstPtr.Long += sizeof(USHORT);
     else State->InstPtr.LowWord += sizeof(USHORT);
+
+#if 1 // disasm
+    *(USHORT*)(&State->InstBuffer[State->InstLength]) = *Data;
+    State->InstLength += 2;
+#endif
 
     return TRUE;
 }
@@ -1001,6 +1010,11 @@ Fast486FetchDword(PFAST486_STATE State,
     if (CachedDescriptor->Size) State->InstPtr.Long += sizeof(ULONG);
     else State->InstPtr.LowWord += sizeof(ULONG);
 
+#if 1 // disasm
+    * (ULONG*)(&State->InstBuffer[State->InstLength]) = *Data;
+    State->InstLength += 4;
+#endif
+
     return TRUE;
 }
 
@@ -1035,10 +1049,13 @@ Fast486ParseModRegRm(PFAST486_STATE State,
 
     /* Set the register operand */
     ModRegRm->Register = (ModRmByte >> 3) & 0x07;
+    SET_OP_REG(State->ModRmFirstOp, ModRegRm->Register);
 
     /* Check the mode */
     if (Mode == 3)
     {
+        SET_OP_REG(1 - State->ModRmFirstOp, RegMem);
+
         /* The second operand is also a register */
         ModRegRm->Memory = FALSE;
         ModRegRm->SecondRegister = RegMem;
@@ -1074,6 +1091,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
             {
                 /* Use the register a base */
                 Base = State->GeneralRegs[SibByte & 0x07].Long;
+                SET_OP_MEMSIBR(1 - State->ModRmFirstOp, Scale, Index, Base);
             }
             else
             {
@@ -1083,6 +1101,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
                     /* Exception occurred */
                     return FALSE;
                 }
+                SET_OP_MEMSIBI(1 - State->ModRmFirstOp, Scale, Index, Base);
             }
 
             if (((SibByte & 0x07) == FAST486_REG_ESP)
@@ -1102,8 +1121,15 @@ Fast486ParseModRegRm(PFAST486_STATE State,
         }
         else if (RegMem == FAST486_REG_EBP)
         {
-            if (Mode) ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBP].Long;
-            else ModRegRm->MemoryAddress = 0;
+            if (Mode)
+            {
+                ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBP].Long;
+                SET_OP_MEMSIBI(1 - State->ModRmFirstOp, 1, FAST486_ALLREGS_EBP, 0);
+            }
+            else
+            {
+                ModRegRm->MemoryAddress = 0;
+            }
         }
         else
         {
@@ -1162,6 +1188,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
                 /* [BX + SI] */
                 ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBX].LowWord
                                            + State->GeneralRegs[FAST486_REG_ESI].LowWord;
+                SET_OP_MEMSIBR(1 - State->ModRmFirstOp, 1, FAST486_ALLREGS_BX, FAST486_ALLREGS_SI);
                 break;
             }
 
@@ -1170,6 +1197,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
                 /* [BX + DI] */
                 ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBX].LowWord
                                            + State->GeneralRegs[FAST486_REG_EDI].LowWord;
+                SET_OP_MEMSIBR(1 - State->ModRmFirstOp, 1, FAST486_ALLREGS_BX, FAST486_ALLREGS_DI);
                 break;
             }
 
@@ -1179,6 +1207,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
                 ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBP].LowWord
                                            + State->GeneralRegs[FAST486_REG_ESI].LowWord;
                 break;
+                SET_OP_MEMSIBR(1 - State->ModRmFirstOp, 1, FAST486_ALLREGS_BP, FAST486_ALLREGS_SI);
             }
 
             case 3:
@@ -1186,6 +1215,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
                 /* SS:[BP + DI] */
                 ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBP].LowWord
                                            + State->GeneralRegs[FAST486_REG_EDI].LowWord;
+                SET_OP_MEMSIBR(1 - State->ModRmFirstOp, 1, FAST486_ALLREGS_BP, FAST486_ALLREGS_DI);
                 break;
             }
 
@@ -1193,6 +1223,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
             {
                 /* [SI] */
                 ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_ESI].LowWord;
+                SET_OP_MEMREG(1 - State->ModRmFirstOp, FAST486_ALLREGS_SI);
                 break;
             }
 
@@ -1200,6 +1231,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
             {
                 /* [DI] */
                 ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EDI].LowWord;
+                SET_OP_MEMREG(1 - State->ModRmFirstOp, FAST486_ALLREGS_DI);
                 break;
             }
 
@@ -1209,11 +1241,13 @@ Fast486ParseModRegRm(PFAST486_STATE State,
                 {
                     /* [BP] */
                     ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBP].LowWord;
+                    SET_OP_MEMREG(1 - State->ModRmFirstOp, FAST486_ALLREGS_BP);
                 }
                 else
                 {
                     /* [constant] (added later) */
                     ModRegRm->MemoryAddress = 0;
+                    SET_OP_MEMIMM(1 - State->ModRmFirstOp, 0);
                 }
 
                 break;
@@ -1223,6 +1257,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
             {
                 /* [BX] */
                 ModRegRm->MemoryAddress = State->GeneralRegs[FAST486_REG_EBX].LowWord;
+                SET_OP_MEMREG(1 - State->ModRmFirstOp, FAST486_ALLREGS_BX);
                 break;
             }
         }
@@ -1252,6 +1287,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
 
             /* Add the signed offset to the address */
             ModRegRm->MemoryAddress += (LONG)Offset;
+            ADD_OP_OFFSET(1 - State->ModRmFirstOp, (LONG)Offset);
         }
         else if ((Mode == 2) || ((Mode == 0) && (RegMem == 6)))
         {
@@ -1266,6 +1302,7 @@ Fast486ParseModRegRm(PFAST486_STATE State,
 
             /* Add the signed offset to the address */
             ModRegRm->MemoryAddress += (LONG)Offset;
+            ADD_OP_OFFSET(1 - State->ModRmFirstOp, (LONG)Offset);
         }
 
         /* Clear the top 16 bits */
@@ -1287,7 +1324,7 @@ Fast486ReadModrmByteOperands(PFAST486_STATE State,
 
     if (RegValue)
     {
-        /* Get the register value */
+         /* Get the register value */
         if (ModRegRm->Register & 0x04)
         {
             /* AH, CH, DH, BH */

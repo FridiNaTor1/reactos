@@ -511,6 +511,65 @@ typedef union _FAST486_FPU_CONTROL_REG
     };
 } FAST486_FPU_CONTROL_REG, *PFAST486_FPU_CONTROL_REG;
 
+typedef enum _FAST486_OPERAND_TYPE
+{
+    FAST486_OPERAND_TYPE_NONE = 0,
+    FAST486_OPERAND_TYPE_REG = 1,
+    FAST486_OPERAND_TYPE_IMM = 2,
+    FAST486_OPERAND_TYPE_MEMIMM = 3,
+    FAST486_OPERAND_TYPE_MEMREG = 4,
+    FAST486_OPERAND_TYPE_MEMSIBR = 5,
+    FAST486_OPERAND_TYPE_MEMSIBI = 6,
+
+} FAST486_OPERAND_TYPE;
+
+typedef enum _FAST486_ALLREGS
+{
+    FAST486_ALLREGS_EAX,
+    FAST486_ALLREGS_ECX,
+    FAST486_ALLREGS_EDX,
+    FAST486_ALLREGS_EBX,
+    FAST486_ALLREGS_ESP,
+    FAST486_ALLREGS_EBP,
+    FAST486_ALLREGS_ESI,
+    FAST486_ALLREGS_EDI,
+
+    FAST486_ALLREGS_AX,
+    FAST486_ALLREGS_CX,
+    FAST486_ALLREGS_DX,
+    FAST486_ALLREGS_BX,
+    FAST486_ALLREGS_SP,
+    FAST486_ALLREGS_BP,
+    FAST486_ALLREGS_SI,
+    FAST486_ALLREGS_DI,
+
+    FAST486_ALLREGS_AL,
+    FAST486_ALLREGS_CL,
+    FAST486_ALLREGS_DL,
+    FAST486_ALLREGS_BL,
+
+    FAST486_ALLREGS_AH,
+    FAST486_ALLREGS_CH,
+    FAST486_ALLREGS_DH,
+    FAST486_ALLREGS_BH,
+
+    FAST486_ALLREGS_ES,
+    FAST486_ALLREGS_CS,
+    FAST486_ALLREGS_SS,
+    FAST486_ALLREGS_DS,
+    FAST486_ALLREGS_FS,
+    FAST486_ALLREGS_GS,
+} FAST486_ALLREGS, *PFAST486_ALLREGS;
+
+typedef struct _FAST486_OPERAND
+{
+    UCHAR Type;
+    UCHAR Register;
+    UCHAR Register2;
+    UCHAR Scale;
+    ULONG Immediate;
+} FAST486_OPERAND, * PFAST486_OPERAND;
+
 struct _FAST486_STATE
 {
     FAST486_MEM_READ_PROC MemReadCallback;
@@ -554,7 +613,28 @@ struct _FAST486_STATE
     FAST486_REG FpuLastOpPtr;
     USHORT FpuLastDataSel;
 #endif
+
+    // Disassemble
+    UCHAR InstBuffer[16];
+    const char* Mnemonic;
+    FAST486_SEG_REG SavedCs;
+    USHORT InstLength;
+    FAST486_OPERAND Operand[2];
+    UCHAR ModRmFirstOp;
 };
+
+#define SET_MNEMONIC(x) State->Mnemonic = x;
+#define SET_OP_REG(n, r) State->Operand[n].Type = FAST486_OPERAND_TYPE_REG, State->Operand[n].Register = (r)
+#define SET_OP_REGNAME(n, r) State->Operand[n].Type = FAST486_OPERAND_TYPE_REG, State->Operand[n].Register = FAST486_ALLREGS_ ## r
+#define SET_OP_IMM(n, i) State->Operand[n].Type = FAST486_OPERAND_TYPE_IMM, State->Operand[n].Immediate = (i)
+#define SET_OP_MEMIMM(n, i) State->Operand[n].Type = FAST486_OPERAND_TYPE_MEMIMM, State->Operand[n].Immediate = (i)
+#define SET_OP_MEMREG(n, r) State->Operand[n].Type = FAST486_OPERAND_TYPE_MEMREG, State->Operand[n].Register = (r)
+#define SET_OP_MEMREGIMM(n, r, i) State->Operand[n].Type = FAST486_OPERAND_TYPE_MEMREG, State->Operand[n].Register = (r), State->Operand[n].Immediate = (i)
+#define SET_OP_MEMSIBR(n, s, i, b) State->Operand[n].Type = FAST486_OPERAND_TYPE_MEMSIBR, State->Operand[n].Scale = (s), State->Operand[n].Register = (i), State->Operand[n].Register2 = (b)
+#define SET_OP_MEMSIBI(n, s, i, b) State->Operand[n].Type = FAST486_OPERAND_TYPE_MEMSIBI, State->Operand[n].Scale = (s), State->Operand[n].Register = (i), State->Operand[n].Immediate = (b)
+#define ADD_OP_OFFSET(n, o) State->Operand[n].Immediate += (o)
+#define ADJUST_OP_TO_BYTE(n) if (State->Operand[n].Type == FAST486_OPERAND_TYPE_REG) State->Operand[n].Register += FAST486_ALLREGS_AL
+#define ADJUST_OP_TO_WORD(n) if (State->Operand[n].Type == FAST486_OPERAND_TYPE_REG) State->Operand[n].Register += FAST486_ALLREGS_AX
 
 /* FUNCTIONS ******************************************************************/
 
