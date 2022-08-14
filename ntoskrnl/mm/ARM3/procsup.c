@@ -1270,11 +1270,16 @@ MmCleanProcessAddressSpace(IN PEPROCESS Process)
     PMM_AVL_TABLE VadTree;
     PETHREAD Thread = PsGetCurrentThread();
 
-    /* Only support this */
-    ASSERT(Process->AddressSpaceInitialized == 2);
-
     /* Remove from the session */
     MiSessionRemoveProcess();
+
+    /* Abort early, when the address space wasn't fully initialized */
+    if (Process->AddressSpaceInitialized < 2)
+    {
+        // FIXME: Do we need to do anything here?
+        DPRINT1("process creation aborted early. Possibly leaking resources\n");
+        return;
+    }
 
     /* Lock the process address space from changes */
     MmLockAddressSpace(&Process->Vm);

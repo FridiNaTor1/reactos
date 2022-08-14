@@ -574,6 +574,8 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
         if (!NT_SUCCESS(Status)) goto CleanupWithRef;
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     /* We now have an address space */
     InterlockedOr((PLONG)&Process->Flags, PSF_HAS_ADDRESS_SPACE_BIT);
 
@@ -634,6 +636,8 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
                                                  SeAuditProcessCreationInfo.
                                                  ImageFileName);
         if (!NT_SUCCESS(Status)) goto CleanupWithRef;
+
+///////////// From here OK! (MmInitializeProcessAddressSpace = 2)
 
         //
         // We need a PEB
