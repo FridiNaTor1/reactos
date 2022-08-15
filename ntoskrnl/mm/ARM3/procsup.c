@@ -1379,7 +1379,8 @@ MmDeleteProcessAddressSpace(IN PEPROCESS Process)
 
     /* Remove us from the list */
     OldIrql = MiAcquireExpansionLock();
-    RemoveEntryList(&Process->Vm.WorkingSetExpansionLinks);
+    if (Process->Vm.WorkingSetExpansionLinks.Flink != NULL)
+        RemoveEntryList(&Process->Vm.WorkingSetExpansionLinks);
     MiReleaseExpansionLock(OldIrql);
 
     /* Acquire the PFN lock */
@@ -1421,8 +1422,7 @@ MmDeleteProcessAddressSpace(IN PEPROCESS Process)
     }
     else
     {
-        /* A partly-initialized process should never exit through here */
-        ASSERT(FALSE);
+        DPRINT1("Deleting partially initialized address space. Might leak resources.");
     }
 
     /* Release the PFN lock */
