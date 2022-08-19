@@ -2215,6 +2215,10 @@ KdSystemDebugControl(
         {
             return KdbRegisterCliCallback(InputBuffer, InputBufferLength);
         }
+        case 'EbdK':
+        {
+            return KdbRegisterCliExtension(InputBuffer);
+        }
 #endif /* KDBG */
 #endif
         default:

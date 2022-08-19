@@ -29,6 +29,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
+#include <kdros.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -123,6 +124,7 @@ BOOLEAN
     IN PCH Argv[]);
 
 static PKDBG_CLI_ROUTINE KdbCliCallbacks[10];
+static KDBG_EXTENSION_API KdbCliExtensions[100];
 static BOOLEAN KdbUseIntelSyntax = FALSE; /* Set to TRUE for intel syntax */
 static BOOLEAN KdbBreakOnModuleLoad = FALSE; /* Set to TRUE to break into KDB when a module is loaded */
 
@@ -395,6 +397,38 @@ static const struct
     { "!handle", "!handle [Handle]", "Displays info about handles.", ExpKdbgExtHandle },
 };
 
+//
+// Known fields table
+//
+typedef struct _KDP_KNOWN_FIELD
+{
+    PCSZ Type;
+    PCSZ Field;
+    ULONGLONG Offset;
+    ULONG Size;
+} KDP_KNOWN_FIELD, *PKDP_KNOWN_FIELD;
+
+static const KDP_KNOWN_FIELD KdbKnownFields[] = {
+};
+
+static const KDP_KNOWN_FIELD*
+KdbpGetKnownField(
+    _In_ PCSZ Type,
+    _In_ PCSZ Field)
+{
+    ULONG i;
+
+    for (i = 0; i < ARRAYSIZE(KdbKnownFields); i++)
+    {
+        if (strcmp(Type, KdbKnownFields[i].Type) == 0 &&
+            strcmp(Field, KdbKnownFields[i].Field) == 0)
+        {
+            return &KdbKnownFields[i];
+        }
+    }
+    return NULL;
+}
+
 /* FUNCTIONS *****************************************************************/
 
 /*!\brief Evaluates an expression...
@@ -411,7 +445,7 @@ static const struct
  */
 static BOOLEAN
 KdbpEvaluateExpression(
-    IN  PCHAR Expression,
+    IN  PCSZ Expression,
     IN  LONG ErrOffset,
     OUT PULONGLONG Result)
 {
@@ -2744,6 +2778,17 @@ KdbpCmdHelp(
                   KdbDebuggerCommands[i].Help);
     }
 
+    KdbpPrint("\n");
+    KdbpPrint("\x1b[7m* %s:\x1b[0m\n", "Misc");
+    for (i = 0; i < RTL_NUMBER_OF(KdbCliExtensions); i++)
+    {
+        if (!KdbCliExtensions[i].Name)
+            break;
+        KdbpPrint("  %-20s - %s\n",
+                  KdbCliExtensions[i].Syntax,
+                  KdbCliExtensions[i].Help);
+    }
+
     return TRUE;
 }
 
@@ -2759,7 +2804,7 @@ KdbpCmdHelp(
  */
 VOID
 KdbpPrint(
-    IN PCHAR Format,
+    IN PCSZ Format,
     IN ...  OPTIONAL)
 {
     static CHAR Buffer[4096];
@@ -2926,6 +2971,356 @@ KdbRegisterCliCallback(
     return FALSE;
 }
 
+static
+ULONG_PTR NTAPI
+KdbpApiGetExpression(
+    _In_ PCSTR lpExpression)
+{
+    BOOLEAN Ok;
+    ULONGLONG Result;
+
+    Ok = KdbpEvaluateExpression(lpExpression, strlen(lpExpression), &Result);
+    if (!Ok)
+        return 0;
+    return Result;
+}
+
+static
+VOID NTAPI
+KdbpApiGetSymbol(
+    _In_ PVOID Offset,
+    _Out_ PCHAR pchBuffer,
+    _Out_ ULONG_PTR* pDisplacement)
+{
+    KdbSymPrintAddress((PVOID)Offset, NULL);
+}
+
+static
+ULONG NTAPI
+KdbpApiDisasm(
+    _Inout_ ULONG_PTR* lpOffset,
+    _In_ PCSTR lpBuffer,
+    _In_ ULONG fShowEffectiveAddress)
+{
+    LONG InstLen;
+
+    InstLen = KdbpDisassemble(*lpOffset, KdbUseIntelSyntax);
+    if (InstLen < 0)
+        return FALSE;
+
+    *lpOffset += InstLen;
+    return TRUE;
+}
+
+static
+ULONG NTAPI
+KdbpApiReadProcessMemory(
+    _In_ ULONG_PTR Offset,
+    _Out_ PVOID lpBuffer,
+    _In_ ULONG cb,
+    _Out_ PULONG lpcbBytesRead)
+{
+    if (!NT_SUCCESS(KdbpSafeReadMemory(lpBuffer, (PVOID)Offset, cb)))
+        return FALSE;
+    *lpcbBytesRead = cb;
+    return TRUE;
+}
+
+static
+ULONG NTAPI
+KdbpApiGetThreadContext(
+    _In_ ULONG Processor,
+    _Out_ PCONTEXT lpContext,
+    _In_ ULONG cbSizeOfContext)
+{
+    if (cbSizeOfContext != sizeof(CONTEXT))
+        return FALSE;
+    RtlCopyMemory(lpContext, KdbCurrentContext, sizeof(CONTEXT));
+    return TRUE;
+}
+
+static
+ULONG NTAPI
+KdbpApiSetThreadContext(
+    _In_ ULONG Processor,
+    _In_ PCONTEXT lpContext,
+    _In_ ULONG cbSizeOfContext)
+{
+    if (cbSizeOfContext != sizeof(CONTEXT))
+        return FALSE;
+    RtlCopyMemory(KdbCurrentContext, lpContext, sizeof(CONTEXT));
+
+    /* FIXME:
+     * KeUnstackDetachProcess(...);
+     * KeStackAttachProcess(...);
+     */
+
+    return TRUE;
+}
+
+static
+ULONG NTAPI
+KdbpApiIoctl(
+    _In_ USHORT IoctlType,
+    _Inout_ PVOID lpvData,
+    _In_ ULONG cbSize)
+{
+    switch (IoctlType)
+    {
+    case IG_GET_DEBUGGER_DATA:
+    {
+        RtlCopyMemory(lpvData, &KdDebuggerDataBlock, sizeof(KdDebuggerDataBlock));
+        return TRUE;
+    }
+    case IG_DUMP_SYMBOL_INFO:
+    {
+        PSYM_DUMP_PARAM sdp = lpvData;
+        const KDP_KNOWN_FIELD* KnownField;
+        PLIST_ENTRY Entry;
+        ULONG i, Offset;
+        FIELD_INFO Field;
+        if (sdp->Options & DBG_DUMP_LIST)
+        {
+            KnownField = KdbpGetKnownField(sdp->sName + 4, sdp->Fields[0].fName);
+            if (!KnownField)
+                return FALSE;
+            Offset = KnownField->Offset;
+
+            Entry = (PLIST_ENTRY)(ULONG_PTR)sdp->addr;
+            if (!(sdp->Options & DBG_DUMP_ADDRESS_OF_FIELD))
+                Entry = (PLIST_ENTRY)((ULONG_PTR)Entry + Offset);
+            while ((ULONG_PTR)Entry->Flink != sdp->addr)
+            {
+                Field.address = (ULONG_PTR)Entry - Offset;
+                if (sdp->CallbackRoutine(&Field, sdp->Context))
+                    break;
+                Entry = Entry->Flink;
+            }
+        }
+        else
+        {
+            for (i = 0; i < sdp->nFields; i++)
+            {
+                KnownField = KdbpGetKnownField(sdp->sName + 4, sdp->Fields[i].fName);
+                if (!KnownField)
+                    return FALSE;
+                Offset = KnownField->Offset;
+                if (sdp->Fields[i].fOptions & DBG_DUMP_FIELD_COPY_FIELD_DATA)
+                {
+                    sdp->size = KnownField->Size;
+                    RtlCopyMemory(sdp->Fields[i].pBuffer, (PVOID)(ULONG_PTR)(sdp->addr + Offset), sdp->size);
+                }
+                else
+                    sdp->Fields[i].address = *(ULONG_PTR*)(ULONG_PTR)(sdp->addr + Offset);
+            }
+        }
+        return TRUE;
+    }
+    case IG_GET_CURRENT_THREAD:
+    {
+        PGET_CURRENT_THREAD_ADDRESS gcta = lpvData;
+        gcta->Address = (ULONG_PTR)PsGetCurrentThread();
+        return TRUE;
+    }
+    case IG_GET_CURRENT_PROCESS:
+    {
+        PGET_CURRENT_PROCESS_ADDRESS gcpa = lpvData;
+        gcpa->Address = (ULONG_PTR)PsGetCurrentProcess();
+        return TRUE;
+    }
+    case IG_GET_EXPRESSION_EX:
+    {
+        PGET_EXPRESSION_EX gee = lpvData;
+        ULONGLONG Value;
+        if (!KdbpEvaluateExpression(gee->Expression, strlen(gee->Expression), &Value))
+            return FALSE;
+        gee->Value = Value;
+        gee->Remainder = strchr(gee->Expression, ' ');
+        return TRUE;
+    }
+    default:
+        return FALSE;
+    }
+
+    /* Must not get there, as default case already handled unknown types */
+    ASSERT(FALSE);
+    return FALSE;
+}
+
+static
+ULONG NTAPI
+KdbpApiStackTrace(
+    _In_ ULONG_PTR FramePointer,
+    _In_ ULONG_PTR StackPointer,
+    _In_ ULONG_PTR ProgramCounter,
+    _Out_ PEXTSTACKTRACE StackFrames,
+    _In_ ULONG Frames)
+{
+#ifdef _M_AMD64
+    ULONG Count = 0;
+    CONTEXT Context = *KdbCurrentContext;
+
+    Context.Rsp = StackPointer;
+    Context.Rip = ProgramCounter;
+
+    while (Count < Frames)
+    {
+        BOOLEAN GotNextFrame;
+
+        if (Context.Rip == 0 || Context.Rsp == 0)
+            break;
+
+        StackFrames[Count].FramePointer = Context.Rsp;
+        StackFrames[Count].ProgramCounter = Context.Rip;
+        Count++;
+
+        GotNextFrame = GetNextFrame(&Context);
+        if (!GotNextFrame)
+            break;
+    }
+
+    return Count;
+
+#elif defined(_M_IX86)
+    ULONG Count = 0;
+    CONTEXT Context = *KdbCurrentContext;
+    ULONG_PTR Frame = FramePointer;
+    ULONG_PTR Address;
+    KDESCRIPTOR Gdtr;
+    USHORT TssSelector;
+    PKTSS Tss;
+
+    /* Retrieve the Global Descriptor Table */
+    Ke386GetGlobalDescriptorTable(&Gdtr.Limit);
+
+    /* Retrieve the current (active) TSS */
+    TssSelector = Ke386GetTr();
+    Tss = KdbpRetrieveTss(TssSelector, NULL, &Gdtr);
+
+    /* Walk through the frames */
+    while (Count < Frames)
+    {
+        BOOLEAN GotNextFrame;
+
+        if (Frame == 0)
+            goto CheckForParentTSS;
+
+        Address = 0;
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Address, (PVOID)(Frame + sizeof(ULONG_PTR)), sizeof(ULONG_PTR))))
+        {
+            goto CheckForParentTSS;
+        }
+
+        if (Address == 0)
+            goto CheckForParentTSS;
+
+        GotNextFrame = NT_SUCCESS(KdbpSafeReadMemory(&Frame, (PVOID)Frame, sizeof(ULONG_PTR)));
+        if (GotNextFrame)
+        {
+            KeSetContextFrameRegister(&Context, Frame);
+        }
+
+        StackFrames[Count].FramePointer = Frame;
+        StackFrames[Count].ProgramCounter = Address;
+        Count++;
+
+        if (!GotNextFrame)
+            goto CheckForParentTSS;
+
+        continue;
+
+CheckForParentTSS:
+        /*
+         * We have ended the stack walking for the current (active) TSS.
+         * Check whether this TSS was nested, and if so switch to its parent
+         * and walk its stack.
+         */
+        if (!KdbpIsNestedTss(TssSelector, Tss))
+            break; // The TSS is not nested, we stop there.
+
+        GotNextFrame = KdbpContextFromPrevTss(&Context, &TssSelector, &Tss, &Gdtr);
+        if (!GotNextFrame)
+            break; // Cannot retrieve the parent TSS, we stop there.
+
+        Address = Context.Eip;
+        Frame = Context.Ebp;
+
+        StackFrames[Count].FramePointer = Frame;
+        StackFrames[Count].ProgramCounter = Address;
+        Count++;
+    }
+
+    return Count;
+#else
+    return 0;
+#endif
+}
+
+WINDBG_EXTENSION_APIS ExtensionApis = {
+    KdbpPrint,
+    KdbpApiGetExpression,
+    KdbpApiGetSymbol,
+    KdbpApiDisasm,
+    KdbpApiReadProcessMemory,
+    KdbpApiGetThreadContext,
+    KdbpApiSetThreadContext,
+    KdbpApiIoctl,
+    KdbpApiStackTrace,
+};
+
+BOOLEAN
+NTAPI
+KdbRegisterCliExtension(
+    PVOID arg)
+{
+    PKDBG_CLI_REGISTRATION Registration = arg;
+    PKDBG_EXTENSION_API p;
+    ULONG i = 0;
+
+    /* Copy all APIs to our local array */
+    for (p = Registration->Api; p->Name; p++)
+    {
+        for (i = 0; i < ARRAYSIZE(KdbCliExtensions); i++)
+        {
+            if (!KdbCliExtensions[i].Name || strcmp(KdbCliExtensions[i].Name, p->Name) == 0)
+                break;
+        }
+        if (i >= ARRAYSIZE(KdbCliExtensions))
+            return FALSE;
+        if (!KdbCliExtensions[i].Name)
+            DPRINT1("Registering new function '%s'\n", p->Name);
+        KdbCliExtensions[i] = *p;
+    }
+
+    /* Call init function */
+    Registration->InitRoutine(&ExtensionApis, 0, 0);
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdbpInvokeCliExtension(
+    IN PCHAR Name,
+    IN PCSTR Args)
+{
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(KdbCliExtensions); i++)
+    {
+        if (!KdbCliExtensions[i].Name)
+            break;
+
+        if (strcmp(KdbCliExtensions[i].Name, Name) == 0)
+        {
+            KdbCliExtensions[i].Routine(NULL, NULL, 0, 0, Args);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 /*! \brief Invokes registered CLI callbacks until one of them handled the
  *         Command.
  *
@@ -2977,6 +3372,7 @@ KdbpDoCommand(
     SIZE_T i;
     PCHAR p;
     ULONG Argc;
+    PCSZ AllArguments;
     // FIXME: for what do we need a 1024 characters command line and 256 tokens?
     static PCHAR Argv[256];
     static CHAR OrigCommand[1024];
@@ -3016,6 +3412,15 @@ KdbpDoCommand(
         {
             return KdbDebuggerCommands[i].Fn(Argc, Argv);
         }
+    }
+
+    AllArguments = OrigCommand + strlen(Argv[0]);
+    if (AllArguments[0] == ' ')
+        AllArguments++;
+
+    if (KdbpInvokeCliExtension(Argv[0], AllArguments))
+    {
+        return TRUE;
     }
 
     /* Now invoke the registered callbacks */

@@ -313,4 +313,310 @@ typedef struct _KDDEBUGGER_DATA64
 #endif
 } KDDEBUGGER_DATA64, *PKDDEBUGGER_DATA64;
 
+typedef VOID
+(__cdecl *PWINDBG_OUTPUT_ROUTINE)(
+    _In_ PCSTR lpFormat,
+    ...);
+
+typedef ULONG_PTR
+(NTAPI *PWINDBG_GET_EXPRESSION)(
+    _In_ PCSTR lpExpression);
+
+typedef VOID
+(NTAPI *PWINDBG_GET_SYMBOL)(
+    _In_ PVOID Offset,
+    _Out_ PCHAR pchBuffer,
+    _Out_ ULONG_PTR* pDisplacement);
+
+typedef ULONG
+(NTAPI *PWINDBG_DISASM)(
+    _Inout_ ULONG_PTR* lpOffset,
+    _In_ PCSTR lpBuffer,
+    _In_ ULONG fShowEffectiveAddress);
+
+typedef ULONG
+(NTAPI *PWINDBG_READ_PROCESS_MEMORY_ROUTINE)(
+    _In_ ULONG_PTR Offset,
+    _Out_ PVOID lpBuffer,
+    _In_ ULONG cb,
+    _Out_ PULONG lpcbBytesRead);
+
+typedef ULONG
+(NTAPI *PWINDBG_SET_THREAD_CONTEXT_ROUTINE)(
+    _In_ ULONG Processor,
+    _In_ PCONTEXT lpContext,
+    _In_ ULONG cbSizeOfContext);
+
+typedef ULONG
+(NTAPI *PWINDBG_GET_THREAD_CONTEXT_ROUTINE)(
+    _In_ ULONG Processor,
+    _Out_ PCONTEXT lpContext,
+    _In_ ULONG cbSizeOfContext);
+
+typedef struct _EXTSTACKTRACE
+{
+    ULONG_PTR FramePointer;
+    ULONG_PTR ProgramCounter;
+    ULONG_PTR ReturnAddress;
+    ULONG_PTR Args[4];
+} EXTSTACKTRACE, *PEXTSTACKTRACE;
+
+typedef ULONG
+(NTAPI *PWINDBG_IOCTL_ROUTINE)(
+    _In_ USHORT IoctlType,
+    _Inout_ PVOID lpvData,
+    _In_ ULONG cbSize);
+
+typedef ULONG
+(NTAPI *PWINDBG_STACKTRACE_ROUTINE)(
+    _In_ ULONG_PTR FramePointer,
+    _In_ ULONG_PTR StackPointer,
+    _In_ ULONG_PTR ProgramCounter,
+    _Out_ PEXTSTACKTRACE StackFrames,
+    _In_ ULONG Frames);
+
+typedef struct _WINDBG_EXTENSION_APIS
+{
+    PWINDBG_OUTPUT_ROUTINE lpOutputRoutine;
+    PWINDBG_GET_EXPRESSION lpGetExpressionRoutine;
+    PWINDBG_GET_SYMBOL lpGetSymbolRoutine;
+    PWINDBG_DISASM lpDisasmRoutine;
+    PWINDBG_READ_PROCESS_MEMORY_ROUTINE lpReadProcessMemoryRoutine;
+    PWINDBG_GET_THREAD_CONTEXT_ROUTINE lpGetThreadContextRoutine;
+    PWINDBG_SET_THREAD_CONTEXT_ROUTINE lpSetThreadContextRoutine;
+    PWINDBG_IOCTL_ROUTINE lpIoctlRoutine;
+    PWINDBG_STACKTRACE_ROUTINE lpStackTraceRoutine;
+} WINDBG_EXTENSION_APIS, *PWINDBG_EXTENSION_APIS;
+
+#define IG_GET_DEBUGGER_DATA             14
+
+#define DBG_DUMP_LIST                  0x00020
+#define DBG_DUMP_ADDRESS_OF_FIELD      0x10000
+
+#define DBG_DUMP_FIELD_COPY_FIELD_DATA 0x00020
+#define DBG_DUMP_FIELD_RETURN_ADDRESS  0x01000
+typedef struct _FIELD_INFO
+{
+    PCSZ fName;
+    ULONG fOptions;
+    ULONG64 address;
+    PVOID pBuffer;
+} FIELD_INFO, *PFIELD_INFO;
+
+typedef ULONG
+(NTAPI *PSYM_DUMP_FIELD_CALLBACK)(
+    _In_ PFIELD_INFO pField,
+    _In_ PVOID UserContext);
+
+typedef struct _SYM_DUMP_PARAM
+{
+    ULONG size;
+    PCSZ sName;
+    ULONG Options;
+    ULONG64 addr;
+    PVOID Context;
+    PSYM_DUMP_FIELD_CALLBACK CallbackRoutine;
+    ULONG nFields;
+    PFIELD_INFO Fields;
+} SYM_DUMP_PARAM, *PSYM_DUMP_PARAM;
+
+#define IG_DUMP_SYMBOL_INFO              22
+
+#define IG_GET_CURRENT_THREAD            25
+typedef struct _GET_CURRENT_THREAD_ADDRESS {
+    ULONG Processor;
+    ULONG64 Address;
+} GET_CURRENT_THREAD_ADDRESS, *PGET_CURRENT_THREAD_ADDRESS;
+
+#define IG_GET_CURRENT_PROCESS           26
+typedef struct _GET_CURRENT_PROCESS_ADDRESS {
+    ULONG Processor;
+    ULONG64 CurrentThread;
+    ULONG64 Address;
+} GET_CURRENT_PROCESS_ADDRESS, *PGET_CURRENT_PROCESS_ADDRESS;
+
+#define IG_GET_EXPRESSION_EX             30
+typedef struct _GET_EXPRESSION_EX {
+    PCSTR Expression;
+    PCSTR Remainder;
+    ULONG64 Value;
+} GET_EXPRESSION_EX, *PGET_EXPRESSION_EX;
+
+#ifndef NOEXTAPI
+
+#define DECLARE_API(s)              \
+    VOID NTAPI                      \
+    s( _In_ HANDLE hCurrentProcess, \
+       _In_ HANDLE hCurrentThread, \
+       _In_ ULONG dwCurrentPc,     \
+       _In_ ULONG dwProcessor,     \
+       _In_ PCSTR args)
+
+extern WINDBG_EXTENSION_APIS ExtensionApis;
+
+#define dprintf       (ExtensionApis.lpOutputRoutine)
+#define GetExpression (ExtensionApis.lpGetExpressionRoutine)
+#define GetSymbol     (ExtensionApis.lpGetSymbolRoutine)
+#define Disasm        (ExtensionApis.lpDisasmRoutine)
+#define ReadMemory    (ExtensionApis.lpReadProcessMemoryRoutine)
+#define GetContext    (ExtensionApis.lpGetThreadContextRoutine)
+#define SetContext    (ExtensionApis.lpSetThreadContextRoutine)
+#define Ioctl         (ExtensionApis.lpIoctlRoutine)
+#define StackTrace    (ExtensionApis.lpStackTraceRoutine)
+
+FORCEINLINE
+ULONG
+GetDebuggerData(
+    _In_ ULONG Tag,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG Size)
+{
+    ((PDBGKD_DEBUG_DATA_HEADER64)Buffer)->OwnerTag = Tag;
+    ((PDBGKD_DEBUG_DATA_HEADER64)Buffer)->Size = Size;
+    return Ioctl(IG_GET_DEBUGGER_DATA, Buffer, Size);
+}
+
+FORCEINLINE
+VOID
+GetCurrentThreadAddr(
+    _In_ ULONG Processor,
+    _Out_ PULONG64 Address)
+{
+    GET_CURRENT_THREAD_ADDRESS gcta;
+    gcta.Processor = Processor;
+
+    Ioctl(IG_GET_CURRENT_THREAD, (PVOID)&gcta, sizeof(gcta));
+
+    *Address = gcta.Address;
+}
+
+FORCEINLINE
+VOID
+GetCurrentProcessAddr(
+    _In_ ULONG Processor,
+    _In_ ULONG64 CurrentThread,
+    _Out_ PULONG64 Address)
+{
+    GET_CURRENT_PROCESS_ADDRESS gcpa;
+    gcpa.Processor = Processor;
+    gcpa.CurrentThread = CurrentThread;
+
+    Ioctl(IG_GET_CURRENT_PROCESS, (PVOID)&gcpa, sizeof(gcpa));
+
+    *Address = gcpa.Address;
+}
+
+FORCEINLINE
+ULONG
+GetExpressionEx(
+    _In_ PCSTR Expression,
+    _Out_ PULONG64 Value,
+    _Out_opt_ PCSTR *Remainder)
+{
+    GET_EXPRESSION_EX gee;
+    gee.Expression = Expression;
+
+    if (!Ioctl(IG_GET_EXPRESSION_EX, (PVOID)&gee, sizeof(gee)))
+        return FALSE;
+
+    *Value = gee.Value;
+    if (Remainder)
+        *Remainder = gee.Remainder;
+    return TRUE;
+}
+
+FORCEINLINE
+ULONG
+GetFieldData(
+    _In_ ULONG64 TypeAddress,
+    _In_ LPCSTR Type,
+    _In_ LPCSTR Field,
+    _In_ ULONG OutSize,
+    _Out_ PVOID pOutValue)
+{
+    FIELD_INFO FieldInfo = {0};
+    SYM_DUMP_PARAM Sym = {0};
+
+    FieldInfo.fName = Field;
+    FieldInfo.fOptions = DBG_DUMP_FIELD_COPY_FIELD_DATA | DBG_DUMP_FIELD_RETURN_ADDRESS;
+    FieldInfo.pBuffer = pOutValue;
+    Sym.size = sizeof(Sym);
+    Sym.sName = Type;
+    Sym.addr = TypeAddress;
+    Sym.nFields = 1;
+    Sym.Fields = &FieldInfo;
+
+    RtlZeroMemory(pOutValue, OutSize);
+    return Ioctl(IG_DUMP_SYMBOL_INFO, &Sym, sizeof(Sym));
+}
+
+#define GetFieldValue(Addr, Type, Field, OutValue) GetFieldData(Addr, Type, Field, sizeof(OutValue), &(OutValue))
+
+static inline
+ULONG64
+GetShortField(
+    _In_ ULONG64 TypeAddress,
+    _In_ LPCSTR Name,
+    _In_ USHORT StoreAddress)
+{
+    static ULONG64 SavedAddress;
+    static PCSZ SavedName;
+    FIELD_INFO FieldInfo = {0};
+    SYM_DUMP_PARAM Sym = {0};
+
+    FieldInfo.fName = Name;
+    Sym.size = sizeof(Sym);
+
+    if (StoreAddress)
+    {
+        Sym.sName = Name;
+        Sym.nFields = 0;
+        SavedName = Name;
+        Sym.addr = SavedAddress = TypeAddress;
+        return Ioctl(IG_DUMP_SYMBOL_INFO, &Sym, sizeof(Sym));
+    }
+    else
+    {
+        Sym.sName = SavedName;
+        Sym.nFields = 1;
+        Sym.Fields = &FieldInfo;
+        Sym.addr = SavedAddress;
+        return Ioctl(IG_DUMP_SYMBOL_INFO, &Sym, sizeof(Sym)) ? FieldInfo.address : 0;
+    }
+}
+
+#define InitTypeRead(Addr, Type) GetShortField(Addr, #Type, 1)
+#define ReadField(Field) GetShortField(0, #Field, 0)
+
+FORCEINLINE
+ULONG
+ListType(
+    _In_ LPCSTR Type,
+    _In_ ULONG64 Address,
+    _In_ USHORT ListByFieldAddress,
+    _In_ LPCSTR NextPointer,
+    _In_ PVOID Context,
+    _In_ PSYM_DUMP_FIELD_CALLBACK CallbackRoutine)
+{
+    FIELD_INFO FieldInfo = {0};
+    SYM_DUMP_PARAM Sym = {0};
+
+    FieldInfo.fName = NextPointer;
+    Sym.size = sizeof(Sym);
+    Sym.sName = Type;
+    Sym.Options = DBG_DUMP_LIST;
+    Sym.addr = Address;
+    Sym.nFields = 1;
+    Sym.Fields = &FieldInfo;
+    Sym.Context = Context;
+    Sym.CallbackRoutine = CallbackRoutine;
+
+    if (ListByFieldAddress)
+        Sym.Options |= DBG_DUMP_ADDRESS_OF_FIELD;
+
+    return Ioctl(IG_DUMP_SYMBOL_INFO, &Sym, sizeof(Sym));
+}
+
+#endif
+
 #endif

@@ -421,15 +421,15 @@ RpnpTopStack(
 static BOOLEAN
 RpnpParseExpression(
     IN  PRPN_STACK Stack,
-    IN  PCHAR Expression,
-    OUT PCHAR *End  OPTIONAL,
+    IN  PCSZ Expression,
+    OUT PCSZ *End  OPTIONAL,
     IN  ULONG CharacterOffset,
     OUT PLONG ErrOffset  OPTIONAL,
     OUT PCHAR ErrMsg  OPTIONAL)
 {
-    PCHAR p = Expression;
-    PCHAR pend;
-    PCHAR Operator = NULL;
+    PCSZ p = Expression;
+    PCSZ pend;
+    PCSZ Operator = NULL;
     LONG OperatorOffset = -1;
     RPN_OP RpnOp;
     RPN_OP PoppedOperator;
@@ -596,7 +596,7 @@ get_operand:
             else
             {
                 /* Immediate value */
-                ull = strtoull(p, &pend, 0);
+                ull = strtoull(p, (PCHAR*)&pend, 0);
                 if (p != pend)
                 {
                     RpnOp.Type = RpnOpImmediate;
@@ -1100,7 +1100,7 @@ RpnpEvaluateStack(
  */
 BOOLEAN
 KdbpRpnEvaluateExpression(
-    IN  PCHAR Expression,
+    IN  PCSZ Expression,
     IN  PCONTEXT Context,
     OUT PULONGLONG Result,
     OUT PLONG ErrOffset  OPTIONAL,

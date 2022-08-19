@@ -85,6 +85,11 @@ KdbRegisterCliCallback(
     PVOID Callback,
     BOOLEAN Deregister);
 
+BOOLEAN
+NTAPI
+KdbRegisterCliExtension(
+    PVOID Registration);
+
 VOID
 KdbpCliInit(VOID);
 
@@ -97,7 +102,7 @@ KdbpCliInterpretInitFile(VOID);
 
 VOID
 KdbpPrint(
-   IN PCHAR Format,
+   IN PCSZ Format,
    IN ...  OPTIONAL);
 
 VOID
@@ -114,7 +119,7 @@ KdbpGetHexNumber(
 
 BOOLEAN
 KdbpRpnEvaluateExpression(
-   IN  PCHAR Expression,
+   IN  PCSZ Expression,
    IN  PCONTEXT Context,
    OUT PULONGLONG Result,
    OUT PLONG ErrOffset  OPTIONAL,
