@@ -87,28 +87,5 @@ KdRosRegisterCliExtension(
     return KdSystemDebugControl((SYSDBG_COMMAND)'EbdK', Registration, FALSE, 0, 0, 0, 0);
 }
 
-typedef
-BOOLEAN
-(NTAPI KDBG_CLI_ROUTINE)(
-    IN PCHAR Command,
-    IN ULONG Argc,
-    IN PCH Argv[]);
-typedef KDBG_CLI_ROUTINE *PKDBG_CLI_ROUTINE;
-
-FORCEINLINE
-ULONG
-KdRosRegisterCliCallback(
-    PKDBG_CLI_ROUTINE Callback)
-{
-    return KdSystemDebugControl((SYSDBG_COMMAND)'RbdK', (PVOID)Callback, FALSE, 0, 0, 0, 0);
-}
-
-FORCEINLINE
-VOID
-KdRosDeregisterCliCallback(
-    PKDBG_CLI_ROUTINE Callback)
-{
-    KdSystemDebugControl((SYSDBG_COMMAND)'RbdK', (PVOID)Callback, TRUE, 0, 0, 0, 0);
-}
 #endif
 

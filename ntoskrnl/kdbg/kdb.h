@@ -81,12 +81,6 @@ extern PCHAR KdbInitFileBuffer;
 
 BOOLEAN
 NTAPI
-KdbRegisterCliCallback(
-    PVOID Callback,
-    BOOLEAN Deregister);
-
-BOOLEAN
-NTAPI
 KdbRegisterCliExtension(
     PVOID Registration);
 

@@ -116,14 +116,6 @@ strtoulptr(const char* nptr, char** endptr, int base)
 
 /* GLOBALS *******************************************************************/
 
-typedef
-BOOLEAN
-(NTAPI *PKDBG_CLI_ROUTINE)(
-    IN PCHAR Command,
-    IN ULONG Argc,
-    IN PCH Argv[]);
-
-static PKDBG_CLI_ROUTINE KdbCliCallbacks[10];
 static KDBG_EXTENSION_API KdbCliExtensions[100];
 static BOOLEAN KdbUseIntelSyntax = FALSE; /* Set to TRUE for intel syntax */
 static BOOLEAN KdbBreakOnModuleLoad = FALSE; /* Set to TRUE to break into KDB when a module is loaded */
@@ -2932,45 +2924,6 @@ KdbpReadCommand(
     Buffer[DataLength] = '\0';
 }
 
-
-BOOLEAN
-NTAPI
-KdbRegisterCliCallback(
-    PVOID Callback,
-    BOOLEAN Deregister)
-{
-    ULONG i;
-
-    /* Loop all entries */
-    for (i = 0; i < _countof(KdbCliCallbacks); i++)
-    {
-        /* Check if deregistering was requested */
-        if (Deregister)
-        {
-            /* Check if this entry is the one that was registered */
-            if (KdbCliCallbacks[i] == Callback)
-            {
-                /* Delete it and report success */
-                KdbCliCallbacks[i] = NULL;
-                return TRUE;
-            }
-        }
-        else
-        {
-            /* Check if this entry is free */
-            if (KdbCliCallbacks[i] == NULL)
-            {
-                /* Set it and and report success */
-                KdbCliCallbacks[i] = Callback;
-                return TRUE;
-            }
-        }
-    }
-
-    /* Unsuccessful */
-    return FALSE;
-}
-
 static
 ULONG_PTR NTAPI
 KdbpApiGetExpression(
@@ -3321,43 +3274,6 @@ KdbpInvokeCliExtension(
     return FALSE;
 }
 
-/*! \brief Invokes registered CLI callbacks until one of them handled the
- *         Command.
- *
- * \param Command - Command line to parse and execute if possible.
- * \param Argc - Number of arguments in Argv
- * \param Argv - Array of strings, each of them containing one argument.
- *
- * \return TRUE, if the command was handled, FALSE if it was not handled.
- */
-static
-BOOLEAN
-KdbpInvokeCliCallbacks(
-    IN PCHAR Command,
-    IN ULONG Argc,
-    IN PCHAR Argv[])
-{
-    ULONG i;
-
-    /* Loop all entries */
-    for (i = 0; i < _countof(KdbCliCallbacks); i++)
-    {
-        /* Check if this entry is registered */
-        if (KdbCliCallbacks[i])
-        {
-            /* Invoke the callback and check if it handled the command */
-            if (KdbCliCallbacks[i](Command, Argc, Argv))
-            {
-                return TRUE;
-            }
-        }
-    }
-
-    /* None of the callbacks handled the command */
-    return FALSE;
-}
-
-
 /*!\brief Parses command line and executes command if found
  *
  * \param Command    Command line to parse and execute if possible.
@@ -3419,12 +3335,6 @@ KdbpDoCommand(
         AllArguments++;
 
     if (KdbpInvokeCliExtension(Argv[0], AllArguments))
-    {
-        return TRUE;
-    }
-
-    /* Now invoke the registered callbacks */
-    if (KdbpInvokeCliCallbacks(Command, Argc, Argv))
     {
         return TRUE;
     }

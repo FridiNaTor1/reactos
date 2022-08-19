@@ -2211,10 +2211,6 @@ KdSystemDebugControl(
         }
 #if defined(KDBG)
         /* Register KDBG CLI callback */
-        case 'RbdK':
-        {
-            return KdbRegisterCliCallback(InputBuffer, InputBufferLength);
-        }
         case 'EbdK':
         {
             return KdbRegisterCliExtension(InputBuffer);
