@@ -11,7 +11,6 @@
 
 #define NDEBUG
 #include <debug.h>
-#include <kdros.h>
 
 HANDLE hModuleWin;
 
@@ -256,7 +255,7 @@ InitProcessCallback(PEPROCESS Process)
 #if DBG
     DbgInitDebugChannels();
 #if defined(KDBG)
-    KdRosRegisterCliCallback(DbgGdiKdbgCliCallback);
+    KdRosRegisterCliExtension(&DbgGdiKdbgCliRegistration);
 #endif
 #endif
 

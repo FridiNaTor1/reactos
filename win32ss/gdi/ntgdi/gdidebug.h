@@ -38,13 +38,8 @@ DbgDumpGdiHandleTableWithBT(VOID);
 
 #if defined(KDBG)
 
-BOOLEAN
-NTAPI
-DbgGdiKdbgCliCallback(
-    _In_ PCHAR Command,
-    _In_ ULONG Argc,
-    _In_ PCH Argv[]);
-
+#include <kdros.h>
+extern KDBG_CLI_REGISTRATION DbgGdiKdbgCliRegistration;
 #endif
 
 #if DBG_ENABLE_EVENT_LOGGING
