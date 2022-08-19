@@ -52,10 +52,13 @@
 
 /* PROTOTYPES ****************************************************************/
 
-static BOOLEAN KdbpCmdEvalExpression(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdDisassembleX(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdRegs(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdBackTrace(ULONG Argc, PCHAR Argv[]);
+extern KDBG_EXTENSION_ROUTINE KdbpCmdEvalExpression;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdDisassemble;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdDisassembleX;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdRegs;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdSRegs;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdDRegs;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdBt;
 
 static BOOLEAN KdbpCmdContinue(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdStep(ULONG Argc, PCHAR Argv[]);
@@ -63,14 +66,16 @@ static BOOLEAN KdbpCmdBreakPointList(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdEnableDisableClearBreakPoint(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdBreakPoint(ULONG Argc, PCHAR Argv[]);
 
-static BOOLEAN KdbpCmdThread(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdProc(ULONG Argc, PCHAR Argv[]);
+extern KDBG_EXTENSION_ROUTINE KdbpCmdThread;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdProc;
 
-static BOOLEAN KdbpCmdMod(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdGdtLdtIdt(ULONG Argc, PCHAR Argv[]);
-static BOOLEAN KdbpCmdPcr(ULONG Argc, PCHAR Argv[]);
+extern KDBG_EXTENSION_ROUTINE KdbpCmdMod;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdGdt;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdLdt;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdIdt;
+extern KDBG_EXTENSION_ROUTINE KdbpCmdPcr;
 #ifdef _M_IX86
-static BOOLEAN KdbpCmdTss(ULONG Argc, PCHAR Argv[]);
+extern KDBG_EXTENSION_ROUTINE KdbpCmdTss;
 #endif
 
 static BOOLEAN KdbpCmdBugCheck(ULONG Argc, PCHAR Argv[]);
@@ -112,7 +117,34 @@ strtoulptr(const char* nptr, char** endptr, int base)
 
 /* GLOBALS *******************************************************************/
 
-static KDBG_EXTENSION_API KdbCliExtensions[100];
+static KDBG_EXTENSION_API KdbCliExtensions[100] = {
+    /* Data */
+    { "?", "? expression", "Evaluate expression.", KdbpCmdEvalExpression },
+#ifdef _M_IX86 // FIXME: this is broken on x64
+    { "disasm", "disasm [address] [L count]", "Disassemble count instructions at address.", KdbpCmdDisassemble },
+#endif // _M_IX86
+    { "x", "x [address] [L count]", "Display count dwords, starting at address.", KdbpCmdDisassembleX },
+    { "regs", "regs", "Display general purpose registers.", KdbpCmdRegs },
+    { "sregs", "sregs", "Display status registers.", KdbpCmdSRegs },
+    { "dregs","dregs", "Display debug registers.",  KdbpCmdDRegs },
+    { "bt", "bt [*frameaddr|thread id]", "Prints current backtrace or from given frame address.", KdbpCmdBt },
+
+    /* Process/Thread */
+    { "thread", "thread [list[ pid]|tid]", "List threads in current or specified process, display thread with given id.", KdbpCmdThread },
+    { "proc", "proc [list|pid]", "List processes, display process with given id.", KdbpCmdProc },
+
+    /* System info */
+    { "mod", "mod [address]", "List all modules or the one containing address.", KdbpCmdMod },
+    { "gdt", "gdt", "Display the global descriptor table.", KdbpCmdGdt },
+    { "ldt", "ldt", "Display the local descriptor table.", KdbpCmdLdt },
+    { "idt", "idt", "Display the interrupt descriptor table.", KdbpCmdIdt },
+    { "pcr", "pcr", "Display the processor control region.", KdbpCmdPcr },
+#ifdef _M_IX86
+    { "tss", "tss [*descaddr]", "Display the current task state segment, or the one specified by its selector number or descriptor address.", KdbpCmdTss },
+#endif
+    { NULL, NULL, NULL, NULL }
+};
+
 static BOOLEAN KdbUseIntelSyntax = FALSE; /* Set to TRUE for intel syntax */
 static BOOLEAN KdbBreakOnModuleLoad = FALSE; /* Set to TRUE to break into KDB when a module is loaded */
 
@@ -325,17 +357,6 @@ static const struct
     PCHAR Help;
     BOOLEAN (*Fn)(ULONG Argc, PCHAR Argv[]);
 } KdbDebuggerCommands[] = {
-    /* Data */
-    { NULL, NULL, "Data", NULL },
-    { "?", "? expression", "Evaluate expression.", KdbpCmdEvalExpression },
-#ifdef _M_IX86 // FIXME: this is broken on x64
-    { "disasm", "disasm [address] [L count]", "Disassemble count instructions at address.", KdbpCmdDisassembleX },
-#endif // _M_IX86
-    { "x", "x [address] [L count]", "Display count dwords, starting at address.", KdbpCmdDisassembleX },
-    { "regs", "regs", "Display general purpose registers.", KdbpCmdRegs },
-    { "sregs", "sregs", "Display status registers.", KdbpCmdRegs },
-    { "dregs", "dregs", "Display debug registers.", KdbpCmdRegs },
-    { "bt", "bt [*frameaddr|thread id]", "Prints current backtrace or from given frame address.", KdbpCmdBackTrace },
     /* Flow control */
     { NULL, NULL, "Flow control", NULL },
     { "cont", "cont", "Continue execution (leave debugger).", KdbpCmdContinue },
@@ -347,22 +368,6 @@ static const struct
     { "bc", "bc [breakpoint]", "Clear breakpoint.", KdbpCmdEnableDisableClearBreakPoint },
     { "bpx", "bpx [address] [IF condition]", "Set software execution breakpoint at address.", KdbpCmdBreakPoint },
     { "bpm", "bpm [r|w|rw|x] [byte|word|dword] [address] [IF condition]", "Set memory breakpoint at address.", KdbpCmdBreakPoint },
-
-    /* Process/Thread */
-    { NULL, NULL, "Process/Thread", NULL },
-    { "thread", "thread [list[ pid]|[attach ]tid]", "List threads in current or specified process, display thread with given id or attach to thread.", KdbpCmdThread },
-    { "proc", "proc [list|[attach ]pid]", "List processes, display process with given id or attach to process.", KdbpCmdProc },
-
-    /* System information */
-    { NULL, NULL, "System info", NULL },
-    { "mod", "mod [address]", "List all modules or the one containing address.", KdbpCmdMod },
-    { "gdt", "gdt", "Display the global descriptor table.", KdbpCmdGdtLdtIdt },
-    { "ldt", "ldt", "Display the local descriptor table.", KdbpCmdGdtLdtIdt },
-    { "idt", "idt", "Display the interrupt descriptor table.", KdbpCmdGdtLdtIdt },
-    { "pcr", "pcr", "Display the processor control region.", KdbpCmdPcr },
-#ifdef _M_IX86
-    { "tss", "tss [selector|*descaddr]", "Display the current task state segment, or the one specified by its selector number or descriptor address.", KdbpCmdTss },
-#endif
 
     /* Others */
     { NULL, NULL, "Others", NULL },
@@ -394,6 +399,72 @@ typedef struct _KDP_KNOWN_FIELD
 } KDP_KNOWN_FIELD, *PKDP_KNOWN_FIELD;
 
 static const KDP_KNOWN_FIELD KdbKnownFields[] = {
+#define KNOWN_FIELD(s, f) { #s, #f, FIELD_OFFSET(s, f), sizeof(((s*)NULL)->f) }
+    KNOWN_FIELD(EPROCESS, ActiveProcessLinks),
+    KNOWN_FIELD(EPROCESS, ImageFileName),
+    KNOWN_FIELD(EPROCESS, UniqueProcessId),
+    KNOWN_FIELD(EPROCESS, Pcb.State),
+    KNOWN_FIELD(EPROCESS, ThreadListHead),
+    KNOWN_FIELD(ETHREAD, ThreadListEntry),
+    KNOWN_FIELD(ETHREAD, Cid.UniqueThread),
+    KNOWN_FIELD(ETHREAD, Tcb.InitialStack),
+    KNOWN_FIELD(ETHREAD, Tcb.KernelStack),
+    KNOWN_FIELD(ETHREAD, Tcb.StackBase),
+    KNOWN_FIELD(ETHREAD, Tcb.StackLimit),
+    KNOWN_FIELD(ETHREAD, Tcb.Priority),
+    KNOWN_FIELD(ETHREAD, Tcb.State),
+    KNOWN_FIELD(ETHREAD, Tcb.Affinity),
+    KNOWN_FIELD(ETHREAD, Tcb.NpxState),
+    KNOWN_FIELD(LDR_DATA_TABLE_ENTRY, InLoadOrderLinks),
+    KNOWN_FIELD(LDR_DATA_TABLE_ENTRY, DllBase),
+    KNOWN_FIELD(LDR_DATA_TABLE_ENTRY, SizeOfImage),
+    KNOWN_FIELD(LDR_DATA_TABLE_ENTRY, BaseDllName),
+#ifdef _M_IX86
+    KNOWN_FIELD(KPCR, SecondLevelCacheSize),
+    KNOWN_FIELD(KPCR, VdmAlert),
+    KNOWN_FIELD(KPCR, NtTib.ExceptionList),
+    KNOWN_FIELD(KPCR, NtTib.StackBase),
+    KNOWN_FIELD(KPCR, NtTib.StackLimit),
+    KNOWN_FIELD(KPCR, NtTib.SubSystemTib),
+    KNOWN_FIELD(KPCR, NtTib.FiberData),
+    KNOWN_FIELD(KPCR, NtTib.ArbitraryUserPointer),
+    KNOWN_FIELD(KPCR, NtTib.Self),
+    KNOWN_FIELD(KPCR, SelfPcr),
+    KNOWN_FIELD(KPCR, Prcb),
+    KNOWN_FIELD(KPCR, Irql),
+    KNOWN_FIELD(KPCR, IRR),
+    KNOWN_FIELD(KPCR, IrrActive),
+    KNOWN_FIELD(KPCR, IDR),
+    KNOWN_FIELD(KPCR, KdVersionBlock),
+    KNOWN_FIELD(KPCR, IDT),
+    KNOWN_FIELD(KPCR, GDT),
+    KNOWN_FIELD(KPCR, TSS),
+    KNOWN_FIELD(KPCR, MajorVersion),
+    KNOWN_FIELD(KPCR, MinorVersion),
+    KNOWN_FIELD(KPCR, SetMember),
+    KNOWN_FIELD(KPCR, StallScaleFactor),
+    KNOWN_FIELD(KPCR, Number),
+    KNOWN_FIELD(KPCR, SecondLevelCacheAssociativity),
+    KNOWN_FIELD(KPCR, VdmAlert),
+    KNOWN_FIELD(KPCR, SecondLevelCacheSize),
+#else
+    KNOWN_FIELD(KPCR, GdtBase),
+    KNOWN_FIELD(KPCR, TssBase),
+    KNOWN_FIELD(KPCR, UserRsp),
+    KNOWN_FIELD(KPCR, Self),
+    KNOWN_FIELD(KPCR, CurrentPrcb),
+    KNOWN_FIELD(KPCR, LockArray),
+    KNOWN_FIELD(KPCR, Used_Self),
+    KNOWN_FIELD(KPCR, IdtBase),
+    KNOWN_FIELD(KPCR, Irql),
+    KNOWN_FIELD(KPCR, SecondLevelCacheAssociativity),
+    KNOWN_FIELD(KPCR, ObsoleteNumber),
+    KNOWN_FIELD(KPCR, MajorVersion),
+    KNOWN_FIELD(KPCR, MinorVersion),
+    KNOWN_FIELD(KPCR, StallScaleFactor),
+    KNOWN_FIELD(KPCR, SecondLevelCacheSize),
+    KNOWN_FIELD(KPCR, KdVersionBlock),
+#endif
 };
 
 static const KDP_KNOWN_FIELD*
@@ -470,66 +541,6 @@ KdbpGetHexNumber(
     *pulValue = strtoul(pszNum, &endptr, 16);
 
     return (*endptr == '\0');
-}
-
-/*!\brief Evaluates an expression and displays the result.
- */
-static BOOLEAN
-KdbpCmdEvalExpression(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    ULONG i;
-    SIZE_T len;
-    ULONGLONG Result = 0;
-    ULONG ul;
-    LONG l = 0;
-    BOOLEAN Ok;
-
-    if (Argc < 2)
-    {
-        KdbpPrint("?: Argument required\n");
-        return TRUE;
-    }
-
-    /* Put the arguments back together */
-    Argc--;
-    for (i = 1; i < Argc; i++)
-    {
-        len = strlen(Argv[i]);
-        Argv[i][len] = ' ';
-    }
-
-    /* Evaluate the expression */
-    Ok = KdbpEvaluateExpression(Argv[1], Argv[1] - Argv[0], &Result);
-    if (Ok)
-    {
-        if (Result > 0x00000000ffffffffLL)
-        {
-            if (Result & 0x8000000000000000LL)
-                KdbpPrint("0x%016I64x  %20I64u  %20I64d\n", Result, Result, Result);
-            else
-                KdbpPrint("0x%016I64x  %20I64u\n", Result, Result);
-        }
-        else
-        {
-            ul = (ULONG)Result;
-
-            if (ul <= 0xff && ul >= 0x80)
-                l = (LONG)((CHAR)ul);
-            else if (ul <= 0xffff && ul >= 0x8000)
-                l = (LONG)((SHORT)ul);
-            else
-                l = (LONG)ul;
-
-            if (l < 0)
-                KdbpPrint("0x%08lx  %10lu  %10ld\n", ul, ul, l);
-            else
-                KdbpPrint("0x%08lx  %10lu\n", ul, ul);
-        }
-    }
-
-    return TRUE;
 }
 
 /*!\brief Retrieves the component ID corresponding to a given component name.
@@ -662,229 +673,6 @@ KdbpCmdFilter(
     return TRUE;
 }
 
-/*!\brief Disassembles 10 instructions at eip or given address or
- *        displays 16 dwords from memory at given address.
- */
-static BOOLEAN
-KdbpCmdDisassembleX(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    ULONG Count;
-    ULONG ul;
-    INT i;
-    ULONGLONG Result = 0;
-    ULONG_PTR Address = KeGetContextPc(KdbCurrentContext);
-    LONG InstLen;
-
-    if (Argv[0][0] == 'x') /* display memory */
-        Count = 16;
-    else /* disassemble */
-        Count = 10;
-
-    if (Argc >= 2)
-    {
-        /* Check for [L count] part */
-        ul = 0;
-        if (strcmp(Argv[Argc-2], "L") == 0)
-        {
-            ul = strtoul(Argv[Argc-1], NULL, 0);
-            if (ul > 0)
-            {
-                Count = ul;
-                Argc -= 2;
-            }
-        }
-        else if (Argv[Argc-1][0] == 'L')
-        {
-            ul = strtoul(Argv[Argc-1] + 1, NULL, 0);
-            if (ul > 0)
-            {
-                Count = ul;
-                Argc--;
-            }
-        }
-
-        /* Put the remaining arguments back together */
-        Argc--;
-        for (ul = 1; ul < Argc; ul++)
-        {
-            Argv[ul][strlen(Argv[ul])] = ' ';
-        }
-        Argc++;
-    }
-
-    /* Evaluate the expression */
-    if (Argc > 1)
-    {
-        if (!KdbpEvaluateExpression(Argv[1], Argv[1] - Argv[0], &Result))
-            return TRUE;
-
-        if (Result > (ULONGLONG)(~((ULONG_PTR)0)))
-            KdbpPrint("Warning: Address %I64x is beeing truncated\n",Result);
-
-        Address = (ULONG_PTR)Result;
-    }
-    else if (Argv[0][0] == 'x')
-    {
-        KdbpPrint("x: Address argument required.\n");
-        return TRUE;
-    }
-
-    if (Argv[0][0] == 'x')
-    {
-        /* Display dwords */
-        ul = 0;
-
-        while (Count > 0)
-        {
-            if (!KdbSymPrintAddress((PVOID)Address, NULL))
-                KdbpPrint("<%p>:", (PVOID)Address);
-            else
-                KdbpPrint(":");
-
-            i = min(4, Count);
-            Count -= i;
-
-            while (--i >= 0)
-            {
-                if (!NT_SUCCESS(KdbpSafeReadMemory(&ul, (PVOID)Address, sizeof(ul))))
-                    KdbpPrint(" ????????");
-                else
-                    KdbpPrint(" %08x", ul);
-
-                Address += sizeof(ul);
-            }
-
-            KdbpPrint("\n");
-        }
-    }
-    else
-    {
-        /* Disassemble */
-        while (Count-- > 0)
-        {
-            if (!KdbSymPrintAddress((PVOID)Address, NULL))
-                KdbpPrint("<%08x>: ", Address);
-            else
-                KdbpPrint(": ");
-
-            InstLen = KdbpDisassemble(Address, KdbUseIntelSyntax);
-            if (InstLen < 0)
-            {
-                KdbpPrint("<INVALID>\n");
-                return TRUE;
-            }
-
-            KdbpPrint("\n");
-            Address += InstLen;
-        }
-    }
-
-    return TRUE;
-}
-
-/*!\brief Displays CPU registers.
- */
-static BOOLEAN
-KdbpCmdRegs(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    PCONTEXT Context = KdbCurrentContext;
-    INT i;
-    static const PCHAR EflagsBits[32] = { " CF", NULL, " PF", " BIT3", " AF", " BIT5",
-                                          " ZF", " SF", " TF", " IF", " DF", " OF",
-                                          NULL, NULL, " NT", " BIT15", " RF", " VF",
-                                          " AC", " VIF", " VIP", " ID", " BIT22",
-                                          " BIT23", " BIT24", " BIT25", " BIT26",
-                                          " BIT27", " BIT28", " BIT29", " BIT30",
-                                          " BIT31" };
-
-    if (Argv[0][0] == 'r') /* regs */
-    {
-#ifdef _M_IX86
-        KdbpPrint("CS:EIP  0x%04x:0x%08x\n"
-                  "SS:ESP  0x%04x:0x%08x\n"
-                  "   EAX  0x%08x   EBX  0x%08x\n"
-                  "   ECX  0x%08x   EDX  0x%08x\n"
-                  "   ESI  0x%08x   EDI  0x%08x\n"
-                  "   EBP  0x%08x\n",
-                  Context->SegCs & 0xFFFF, Context->Eip,
-                  Context->SegSs, Context->Esp,
-                  Context->Eax, Context->Ebx,
-                  Context->Ecx, Context->Edx,
-                  Context->Esi, Context->Edi,
-                  Context->Ebp);
-#else
-        KdbpPrint("CS:RIP  0x%04x:0x%p\n"
-                  "SS:RSP  0x%04x:0x%p\n"
-                  "   RAX  0x%p     RBX  0x%p\n"
-                  "   RCX  0x%p     RDX  0x%p\n"
-                  "   RSI  0x%p     RDI  0x%p\n"
-                  "   RBP  0x%p\n",
-                  Context->SegCs & 0xFFFF, Context->Rip,
-                  Context->SegSs, Context->Rsp,
-                  Context->Rax, Context->Rbx,
-                  Context->Rcx, Context->Rdx,
-                  Context->Rsi, Context->Rdi,
-                  Context->Rbp);
-#endif
-        /* Display the EFlags */
-        KdbpPrint("EFLAGS  0x%08x ", Context->EFlags);
-        for (i = 0; i < 32; i++)
-        {
-            if (i == 1)
-            {
-                if ((Context->EFlags & (1 << 1)) == 0)
-                    KdbpPrint(" !BIT1");
-            }
-            else if (i == 12)
-            {
-                KdbpPrint(" IOPL%d", (Context->EFlags >> 12) & 3);
-            }
-            else if (i == 13)
-            {
-            }
-            else if ((Context->EFlags & (1 << i)) != 0)
-            {
-                KdbpPrint(EflagsBits[i]);
-            }
-        }
-        KdbpPrint("\n");
-    }
-    else if (Argv[0][0] == 's') /* sregs */
-    {
-        KdbpPrint("CS  0x%04x  Index 0x%04x  %cDT RPL%d\n",
-                  Context->SegCs & 0xffff, (Context->SegCs & 0xffff) >> 3,
-                  (Context->SegCs & (1 << 2)) ? 'L' : 'G', Context->SegCs & 3);
-        KdbpPrint("DS  0x%04x  Index 0x%04x  %cDT RPL%d\n",
-                  Context->SegDs, Context->SegDs >> 3, (Context->SegDs & (1 << 2)) ? 'L' : 'G', Context->SegDs & 3);
-        KdbpPrint("ES  0x%04x  Index 0x%04x  %cDT RPL%d\n",
-                  Context->SegEs, Context->SegEs >> 3, (Context->SegEs & (1 << 2)) ? 'L' : 'G', Context->SegEs & 3);
-        KdbpPrint("FS  0x%04x  Index 0x%04x  %cDT RPL%d\n",
-                  Context->SegFs, Context->SegFs >> 3, (Context->SegFs & (1 << 2)) ? 'L' : 'G', Context->SegFs & 3);
-        KdbpPrint("GS  0x%04x  Index 0x%04x  %cDT RPL%d\n",
-                  Context->SegGs, Context->SegGs >> 3, (Context->SegGs & (1 << 2)) ? 'L' : 'G', Context->SegGs & 3);
-        KdbpPrint("SS  0x%04x  Index 0x%04x  %cDT RPL%d\n",
-                  Context->SegSs, Context->SegSs >> 3, (Context->SegSs & (1 << 2)) ? 'L' : 'G', Context->SegSs & 3);
-    }
-    else /* dregs */
-    {
-        ASSERT(Argv[0][0] == 'd');
-        KdbpPrint("DR0  0x%08x\n"
-                  "DR1  0x%08x\n"
-                  "DR2  0x%08x\n"
-                  "DR3  0x%08x\n"
-                  "DR6  0x%08x\n"
-                  "DR7  0x%08x\n",
-                  Context->Dr0, Context->Dr1, Context->Dr2, Context->Dr3,
-                  Context->Dr6, Context->Dr7);
-    }
-
-    return TRUE;
-}
-
 #ifdef _M_IX86
 static PKTSS
 KdbpRetrieveTss(
@@ -942,10 +730,6 @@ KdbpIsNestedTss(
     if (!Tss)
         return FALSE;
 
-#ifdef _M_AMD64
-    // HACK
-    return FALSE;
-#else
     /* Retrieve the TSS Backlink */
     if (!NT_SUCCESS(KdbpSafeReadMemory(&Backlink,
                                        (PVOID)&Tss->Backlink,
@@ -953,7 +737,6 @@ KdbpIsNestedTss(
     {
         return FALSE;
     }
-#endif
 
     return (Backlink != 0 && Backlink != TssSelector);
 }
@@ -969,10 +752,6 @@ KdbpContextFromPrevTss(
     USHORT Backlink;
     PKTSS Tss = *pTss;
 
-#ifdef _M_AMD64
-    // HACK
-    return FALSE;
-#else
     /* Retrieve the TSS Backlink */
     if (!NT_SUCCESS(KdbpSafeReadMemory(&Backlink,
                                        (PVOID)&Tss->Backlink,
@@ -1005,13 +784,11 @@ KdbpContextFromPrevTss(
     *pTss = Tss;
     Context->Eip = Eip;
     Context->Ebp = Ebp;
-#endif
     return TRUE;
 }
-#endif
+#endif // _M_IX86
 
 #ifdef _M_AMD64
-
 static
 BOOLEAN
 GetNextFrame(
@@ -1053,209 +830,7 @@ GetNextFrame(
 
     return TRUE;
 }
-
-static BOOLEAN
-KdbpCmdBackTrace(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    CONTEXT Context = *KdbCurrentContext;
-
-    /* Walk through the frames */
-    KdbpPrint("Frames:\n");
-    do
-    {
-        BOOLEAN GotNextFrame;
-
-        KdbpPrint("[%p] ", (PVOID)Context.Rsp);
-
-        /* Print the location after the call instruction */
-        if (!KdbSymPrintAddress((PVOID)Context.Rip, &Context))
-            KdbpPrint("<%p>", (PVOID)Context.Rip);
-        KdbpPrint("\n");
-
-        GotNextFrame = GetNextFrame(&Context);
-        if (!GotNextFrame)
-        {
-            KdbpPrint("Couldn't get next frame\n");
-            break;
-        }
-    } while ((Context.Rip != 0) && (Context.Rsp != 0));
-
-    return TRUE;
-}
-#else
-/*!\brief Displays a backtrace.
- */
-static BOOLEAN
-KdbpCmdBackTrace(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    ULONG ul;
-    ULONGLONG Result = 0;
-    CONTEXT Context = *KdbCurrentContext;
-    ULONG_PTR Frame = KeGetContextFrameRegister(&Context);
-    ULONG_PTR Address;
-
-    if (Argc >= 2)
-    {
-        /* Check for [L count] part */
-        ul = 0;
-        if (strcmp(Argv[Argc-2], "L") == 0)
-        {
-            ul = strtoul(Argv[Argc-1], NULL, 0);
-            if (ul > 0)
-            {
-                Argc -= 2;
-            }
-        }
-        else if (Argv[Argc-1][0] == 'L')
-        {
-            ul = strtoul(Argv[Argc-1] + 1, NULL, 0);
-            if (ul > 0)
-            {
-                Argc--;
-            }
-        }
-
-        /* Put the remaining arguments back together */
-        Argc--;
-        for (ul = 1; ul < Argc; ul++)
-        {
-            Argv[ul][strlen(Argv[ul])] = ' ';
-        }
-        Argc++;
-    }
-
-    /* Check if a Frame Address or Thread ID is given */
-    if (Argc > 1)
-    {
-        if (Argv[1][0] == '*')
-        {
-            Argv[1]++;
-
-            /* Evaluate the expression */
-            if (!KdbpEvaluateExpression(Argv[1], Argv[1] - Argv[0], &Result))
-                return TRUE;
-
-            if (Result > (ULONGLONG)(~((ULONG_PTR)0)))
-                KdbpPrint("Warning: Address %I64x is beeing truncated\n", Result);
-
-            Frame = (ULONG_PTR)Result;
-        }
-        else
-        {
-            KdbpPrint("Thread backtrace not supported yet!\n");
-            return TRUE;
-        }
-    }
-
-#ifdef _M_IX86
-    KDESCRIPTOR Gdtr;
-    USHORT TssSelector;
-    PKTSS Tss;
-
-    /* Retrieve the Global Descriptor Table */
-    Ke386GetGlobalDescriptorTable(&Gdtr.Limit);
-
-    /* Retrieve the current (active) TSS */
-    TssSelector = Ke386GetTr();
-    Tss = KdbpRetrieveTss(TssSelector, NULL, &Gdtr);
-    if (KdbpIsNestedTss(TssSelector, Tss))
-    {
-        /* Display the active TSS if it is nested */
-        KdbpPrint("[Active TSS 0x%04x @ 0x%p]\n", TssSelector, Tss);
-    }
-#endif
-
-    /* If no Frame Address or Thread ID was given, try printing the function at EIP */
-    if (Argc <= 1)
-    {
-        KdbpPrint("Eip:\n");
-        if (!KdbSymPrintAddress((PVOID)KeGetContextPc(&Context), &Context))
-            KdbpPrint("<%p>\n", KeGetContextPc(&Context));
-        else
-            KdbpPrint("\n");
-    }
-
-    /* Walk through the frames */
-    KdbpPrint("Frames:\n");
-    for (;;)
-    {
-        BOOLEAN GotNextFrame;
-
-        if (Frame == 0)
-            goto CheckForParentTSS;
-
-        Address = 0;
-        if (!NT_SUCCESS(KdbpSafeReadMemory(&Address, (PVOID)(Frame + sizeof(ULONG_PTR)), sizeof(ULONG_PTR))))
-        {
-            KdbpPrint("Couldn't access memory at 0x%p!\n", Frame + sizeof(ULONG_PTR));
-            goto CheckForParentTSS;
-        }
-
-        if (Address == 0)
-            goto CheckForParentTSS;
-
-        GotNextFrame = NT_SUCCESS(KdbpSafeReadMemory(&Frame, (PVOID)Frame, sizeof(ULONG_PTR)));
-        if (GotNextFrame)
-        {
-            KeSetContextFrameRegister(&Context, Frame);
-        }
-        // else
-            // Frame = 0;
-
-        /* Print the location of the call instruction (assumed 5 bytes length) */
-        if (!KdbSymPrintAddress((PVOID)(Address - 5), &Context))
-            KdbpPrint("<%08x>\n", Address);
-        else
-            KdbpPrint("\n");
-
-        if (!GotNextFrame)
-        {
-            KdbpPrint("Couldn't access memory at 0x%p!\n", Frame);
-            goto CheckForParentTSS; // break;
-        }
-
-        continue;
-
-CheckForParentTSS:
-#ifndef _M_IX86
-        break;
-#else
-        /*
-         * We have ended the stack walking for the current (active) TSS.
-         * Check whether this TSS was nested, and if so switch to its parent
-         * and walk its stack.
-         */
-        if (!KdbpIsNestedTss(TssSelector, Tss))
-            break; // The TSS is not nested, we stop there.
-
-        GotNextFrame = KdbpContextFromPrevTss(&Context, &TssSelector, &Tss, &Gdtr);
-        if (!GotNextFrame)
-        {
-            KdbpPrint("Couldn't access parent TSS 0x%04x\n", Tss->Backlink);
-            break; // Cannot retrieve the parent TSS, we stop there.
-        }
-
-
-        Address = Context.Eip;
-        Frame = Context.Ebp;
-
-        KdbpPrint("[Parent TSS 0x%04x @ 0x%p]\n", TssSelector, Tss);
-
-        if (!KdbSymPrintAddress((PVOID)Address, &Context))
-            KdbpPrint("<%08x>\n", Address);
-        else
-            KdbpPrint("\n");
-#endif
-    }
-
-    return TRUE;
-}
-
-#endif // M_AMD64
+#endif // _M_AMD64
 
 /*!\brief Continues execution of the system/leaves KDB.
  */
@@ -1559,793 +1134,6 @@ KdbpCmdBreakPoint(ULONG Argc, PCHAR Argv[])
 
     return TRUE;
 }
-
-/*!\brief Lists threads or switches to another thread context.
- */
-static BOOLEAN
-KdbpCmdThread(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    PLIST_ENTRY Entry;
-    PETHREAD Thread = NULL;
-    PEPROCESS Process = NULL;
-    BOOLEAN ReferencedThread = FALSE, ReferencedProcess = FALSE;
-    PULONG_PTR Stack;
-    PULONG_PTR Frame;
-    ULONG_PTR Pc;
-    ULONG_PTR ul = 0;
-    PCHAR State, pend, str1, str2;
-    static const PCHAR ThreadStateToString[DeferredReady+1] =
-    {
-        "Initialized", "Ready", "Running",
-        "Standby", "Terminated", "Waiting",
-        "Transition", "DeferredReady"
-    };
-
-    ASSERT(KdbCurrentProcess);
-
-    if (Argc >= 2 && _stricmp(Argv[1], "list") == 0)
-    {
-        Process = KdbCurrentProcess;
-
-        if (Argc >= 3)
-        {
-            ul = strtoulptr(Argv[2], &pend, 0);
-            if (Argv[2] == pend)
-            {
-                KdbpPrint("thread: '%s' is not a valid process id!\n", Argv[2]);
-                return TRUE;
-            }
-
-            if (!NT_SUCCESS(PsLookupProcessByProcessId((PVOID)ul, &Process)))
-            {
-                KdbpPrint("thread: Invalid process id!\n");
-                return TRUE;
-            }
-
-            /* Remember our reference */
-            ReferencedProcess = TRUE;
-        }
-
-        Entry = Process->ThreadListHead.Flink;
-        if (Entry == &Process->ThreadListHead)
-        {
-            if (Argc >= 3)
-                KdbpPrint("No threads in process 0x%px!\n", (PVOID)ul);
-            else
-                KdbpPrint("No threads in current process!\n");
-
-            if (ReferencedProcess)
-                ObDereferenceObject(Process);
-
-            return TRUE;
-        }
-
-        KdbpPrint("  TID         State        Prior.  Affinity    EBP         EIP\n");
-        do
-        {
-            Thread = CONTAINING_RECORD(Entry, ETHREAD, ThreadListEntry);
-
-            if (Thread == KdbCurrentThread)
-            {
-                str1 = "\x1b[1m*";
-                str2 = "\x1b[0m";
-            }
-            else
-            {
-                str1 = " ";
-                str2 = "";
-            }
-
-            if (!Thread->Tcb.InitialStack)
-            {
-                /* Thread has no kernel stack (probably terminated) */
-                Stack = Frame = NULL;
-                Pc = 0;
-            }
-            else if (Thread->Tcb.TrapFrame)
-            {
-                Stack = (PULONG_PTR)KeGetTrapFrameStackRegister(Thread->Tcb.TrapFrame);
-                Frame = (PULONG_PTR)KeGetTrapFrameFrameRegister(Thread->Tcb.TrapFrame);
-                Pc = KeGetTrapFramePc(Thread->Tcb.TrapFrame);
-            }
-            else
-            {
-                Stack = (PULONG_PTR)Thread->Tcb.KernelStack;
-                Frame = (PULONG_PTR)Stack[4];
-                Pc = 0;
-
-                if (Frame) /* FIXME: Should we attach to the process to read Ebp[1]? */
-                    KdbpSafeReadMemory(&Pc, Frame + 1, sizeof(Pc));
-            }
-
-            if (Thread->Tcb.State < (DeferredReady + 1))
-                State = ThreadStateToString[Thread->Tcb.State];
-            else
-                State = "Unknown";
-
-            KdbpPrint(" %s0x%08x  %-11s  %3d     0x%08x  0x%08x  0x%08x%s\n",
-                      str1,
-                      Thread->Cid.UniqueThread,
-                      State,
-                      Thread->Tcb.Priority,
-                      Thread->Tcb.Affinity,
-                      Frame,
-                      Pc,
-                      str2);
-
-            Entry = Entry->Flink;
-        }
-        while (Entry != &Process->ThreadListHead);
-
-        /* Release our reference, if any */
-        if (ReferencedProcess)
-            ObDereferenceObject(Process);
-    }
-    else if (Argc >= 2 && _stricmp(Argv[1], "attach") == 0)
-    {
-        if (Argc < 3)
-        {
-            KdbpPrint("thread attach: thread id argument required!\n");
-            return TRUE;
-        }
-
-        ul = strtoulptr(Argv[2], &pend, 0);
-        if (Argv[2] == pend)
-        {
-            KdbpPrint("thread attach: '%s' is not a valid thread id!\n", Argv[2]);
-            return TRUE;
-        }
-
-        if (!KdbpAttachToThread((PVOID)ul))
-        {
-            return TRUE;
-        }
-
-        KdbpPrint("Attached to thread 0x%08x.\n", ul);
-    }
-    else
-    {
-        Thread = KdbCurrentThread;
-
-        if (Argc >= 2)
-        {
-            ul = strtoulptr(Argv[1], &pend, 0);
-            if (Argv[1] == pend)
-            {
-                KdbpPrint("thread: '%s' is not a valid thread id!\n", Argv[1]);
-                return TRUE;
-            }
-
-            if (!NT_SUCCESS(PsLookupThreadByThreadId((PVOID)ul, &Thread)))
-            {
-                KdbpPrint("thread: Invalid thread id!\n");
-                return TRUE;
-            }
-
-            /* Remember our reference */
-            ReferencedThread = TRUE;
-        }
-
-        if (Thread->Tcb.State < (DeferredReady + 1))
-            State = ThreadStateToString[Thread->Tcb.State];
-        else
-            State = "Unknown";
-
-        KdbpPrint("%s"
-                  "  TID:            0x%08x\n"
-                  "  State:          %s (0x%x)\n"
-                  "  Priority:       %d\n"
-                  "  Affinity:       0x%08x\n"
-                  "  Initial Stack:  0x%08x\n"
-                  "  Stack Limit:    0x%08x\n"
-                  "  Stack Base:     0x%08x\n"
-                  "  Kernel Stack:   0x%08x\n"
-                  "  Trap Frame:     0x%08x\n"
-#ifndef _M_AMD64
-                  "  NPX State:      %s (0x%x)\n"
-#endif
-                  , (Argc < 2) ? "Current Thread:\n" : ""
-                  , Thread->Cid.UniqueThread
-                  , State, Thread->Tcb.State
-                  , Thread->Tcb.Priority
-                  , Thread->Tcb.Affinity
-                  , Thread->Tcb.InitialStack
-                  , Thread->Tcb.StackLimit
-                  , Thread->Tcb.StackBase
-                  , Thread->Tcb.KernelStack
-                  , Thread->Tcb.TrapFrame
-#ifndef _M_AMD64
-                  , NPX_STATE_TO_STRING(Thread->Tcb.NpxState), Thread->Tcb.NpxState
-#endif
-            );
-
-            /* Release our reference if we had one */
-            if (ReferencedThread)
-                ObDereferenceObject(Thread);
-    }
-
-    return TRUE;
-}
-
-/*!\brief Lists processes or switches to another process context.
- */
-static BOOLEAN
-KdbpCmdProc(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    PLIST_ENTRY Entry;
-    PEPROCESS Process;
-    BOOLEAN ReferencedProcess = FALSE;
-    PCHAR State, pend, str1, str2;
-    ULONG_PTR ul;
-    extern LIST_ENTRY PsActiveProcessHead;
-
-    if (Argc >= 2 && _stricmp(Argv[1], "list") == 0)
-    {
-        Entry = PsActiveProcessHead.Flink;
-        if (!Entry || Entry == &PsActiveProcessHead)
-        {
-            KdbpPrint("No processes in the system!\n");
-            return TRUE;
-        }
-
-        KdbpPrint("  PID         State       Filename\n");
-        do
-        {
-            Process = CONTAINING_RECORD(Entry, EPROCESS, ActiveProcessLinks);
-
-            if (Process == KdbCurrentProcess)
-            {
-                str1 = "\x1b[1m*";
-                str2 = "\x1b[0m";
-            }
-            else
-            {
-                str1 = " ";
-                str2 = "";
-            }
-
-            State = ((Process->Pcb.State == ProcessInMemory) ? "In Memory" :
-                    ((Process->Pcb.State == ProcessOutOfMemory) ? "Out of Memory" : "In Transition"));
-
-            KdbpPrint(" %s0x%08x  %-10s  %s%s\n",
-                      str1,
-                      Process->UniqueProcessId,
-                      State,
-                      Process->ImageFileName,
-                      str2);
-
-            Entry = Entry->Flink;
-        }
-        while(Entry != &PsActiveProcessHead);
-    }
-    else if (Argc >= 2 && _stricmp(Argv[1], "attach") == 0)
-    {
-        if (Argc < 3)
-        {
-            KdbpPrint("process attach: process id argument required!\n");
-            return TRUE;
-        }
-
-        ul = strtoulptr(Argv[2], &pend, 0);
-        if (Argv[2] == pend)
-        {
-            KdbpPrint("process attach: '%s' is not a valid process id!\n", Argv[2]);
-            return TRUE;
-        }
-
-        if (!KdbpAttachToProcess((PVOID)ul))
-        {
-            return TRUE;
-        }
-
-        KdbpPrint("Attached to process 0x%p, thread 0x%p.\n", (PVOID)ul,
-                  KdbCurrentThread->Cid.UniqueThread);
-    }
-    else
-    {
-        Process = KdbCurrentProcess;
-
-        if (Argc >= 2)
-        {
-            ul = strtoulptr(Argv[1], &pend, 0);
-            if (Argv[1] == pend)
-            {
-                KdbpPrint("proc: '%s' is not a valid process id!\n", Argv[1]);
-                return TRUE;
-            }
-
-            if (!NT_SUCCESS(PsLookupProcessByProcessId((PVOID)ul, &Process)))
-            {
-                KdbpPrint("proc: Invalid process id!\n");
-                return TRUE;
-            }
-
-            /* Remember our reference */
-            ReferencedProcess = TRUE;
-        }
-
-        State = ((Process->Pcb.State == ProcessInMemory) ? "In Memory" :
-                ((Process->Pcb.State == ProcessOutOfMemory) ? "Out of Memory" : "In Transition"));
-        KdbpPrint("%s"
-                  "  PID:             0x%08x\n"
-                  "  State:           %s (0x%x)\n"
-                  "  Image Filename:  %s\n",
-                  (Argc < 2) ? "Current process:\n" : "",
-                  Process->UniqueProcessId,
-                  State, Process->Pcb.State,
-                  Process->ImageFileName);
-
-        /* Release our reference, if any */
-        if (ReferencedProcess)
-            ObDereferenceObject(Process);
-    }
-
-    return TRUE;
-}
-
-/*!\brief Lists loaded modules or the one containing the specified address.
- */
-static BOOLEAN
-KdbpCmdMod(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    ULONGLONG Result = 0;
-    ULONG_PTR Address;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
-    BOOLEAN DisplayOnlyOneModule = FALSE;
-    INT i = 0;
-
-    if (Argc >= 2)
-    {
-        /* Put the arguments back together */
-        Argc--;
-        while (--Argc >= 1)
-            Argv[Argc][strlen(Argv[Argc])] = ' ';
-
-        /* Evaluate the expression */
-        if (!KdbpEvaluateExpression(Argv[1], Argv[1] - Argv[0], &Result))
-        {
-            return TRUE;
-        }
-
-        if (Result > (ULONGLONG)(~((ULONG_PTR)0)))
-            KdbpPrint("%s: Warning: Address %I64x is beeing truncated\n", Argv[0],Result);
-
-        Address = (ULONG_PTR)Result;
-
-        if (!KdbpSymFindModule((PVOID)Address, -1, &LdrEntry))
-        {
-            KdbpPrint("No module containing address 0x%p found!\n", Address);
-            return TRUE;
-        }
-
-        DisplayOnlyOneModule = TRUE;
-    }
-    else
-    {
-        if (!KdbpSymFindModule(NULL, 0, &LdrEntry))
-        {
-            ULONG_PTR ntoskrnlBase = (ULONG_PTR)__ImageBase;
-            KdbpPrint("  Base      Size      Name\n");
-            KdbpPrint("  %p  %08x  %s\n", (PVOID)ntoskrnlBase, 0, "ntoskrnl.exe");
-            return TRUE;
-        }
-
-        i = 1;
-    }
-
-    KdbpPrint("  Base      Size      Name\n");
-    for (;;)
-    {
-        KdbpPrint("  %p  %08x  ", LdrEntry->DllBase, LdrEntry->SizeOfImage);
-        KdbpPrintUnicodeString(&LdrEntry->BaseDllName);
-        KdbpPrint("\n");
-
-        if(DisplayOnlyOneModule || !KdbpSymFindModule(NULL, i++, &LdrEntry))
-            break;
-    }
-
-    return TRUE;
-}
-
-/*!\brief Displays GDT, LDT or IDT.
- */
-static BOOLEAN
-KdbpCmdGdtLdtIdt(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    KDESCRIPTOR Reg;
-    ULONG SegDesc[2];
-    ULONG SegBase;
-    ULONG SegLimit;
-    PCHAR SegType;
-    USHORT SegSel;
-    UCHAR Type, Dpl;
-    INT i;
-    ULONG ul;
-
-    if (Argv[0][0] == 'i')
-    {
-        /* Read IDTR */
-        __sidt(&Reg.Limit);
-
-        if (Reg.Limit < 7)
-        {
-            KdbpPrint("Interrupt descriptor table is empty.\n");
-            return TRUE;
-        }
-
-        KdbpPrint("IDT Base: 0x%08x  Limit: 0x%04x\n", Reg.Base, Reg.Limit);
-        KdbpPrint("  Idx  Type        Seg. Sel.  Offset      DPL\n");
-
-        for (i = 0; (i + sizeof(SegDesc) - 1) <= Reg.Limit; i += 8)
-        {
-            if (!NT_SUCCESS(KdbpSafeReadMemory(SegDesc, (PVOID)((ULONG_PTR)Reg.Base + i), sizeof(SegDesc))))
-            {
-                KdbpPrint("Couldn't access memory at 0x%p!\n", (PVOID)((ULONG_PTR)Reg.Base + i));
-                return TRUE;
-            }
-
-            Dpl = ((SegDesc[1] >> 13) & 3);
-            if ((SegDesc[1] & 0x1f00) == 0x0500)        /* Task gate */
-                SegType = "TASKGATE";
-            else if ((SegDesc[1] & 0x1fe0) == 0x0e00)   /* 32 bit Interrupt gate */
-                SegType = "INTGATE32";
-            else if ((SegDesc[1] & 0x1fe0) == 0x0600)   /* 16 bit Interrupt gate */
-                SegType = "INTGATE16";
-            else if ((SegDesc[1] & 0x1fe0) == 0x0f00)   /* 32 bit Trap gate */
-                SegType = "TRAPGATE32";
-            else if ((SegDesc[1] & 0x1fe0) == 0x0700)   /* 16 bit Trap gate */
-                SegType = "TRAPGATE16";
-            else
-                SegType = "UNKNOWN";
-
-            if ((SegDesc[1] & (1 << 15)) == 0) /* not present */
-            {
-                KdbpPrint("  %03d  %-10s  [NP]       [NP]        %02d\n",
-                          i / 8, SegType, Dpl);
-            }
-            else if ((SegDesc[1] & 0x1f00) == 0x0500) /* Task gate */
-            {
-                SegSel = SegDesc[0] >> 16;
-                KdbpPrint("  %03d  %-10s  0x%04x                 %02d\n",
-                          i / 8, SegType, SegSel, Dpl);
-            }
-            else
-            {
-                SegSel = SegDesc[0] >> 16;
-                SegBase = (SegDesc[1] & 0xffff0000) | (SegDesc[0] & 0x0000ffff);
-                KdbpPrint("  %03d  %-10s  0x%04x     0x%08x  %02d\n",
-                          i / 8, SegType, SegSel, SegBase, Dpl);
-            }
-        }
-    }
-    else
-    {
-        ul = 0;
-
-        if (Argv[0][0] == 'g')
-        {
-            /* Read GDTR */
-            Ke386GetGlobalDescriptorTable(&Reg.Limit);
-            i = 8;
-        }
-        else
-        {
-            ASSERT(Argv[0][0] == 'l');
-
-            /* Read LDTR */
-            Ke386GetLocalDescriptorTable(&Reg.Limit);
-            Reg.Base = 0;
-            i = 0;
-            ul = 1 << 2;
-        }
-
-        if (Reg.Limit < 7)
-        {
-            KdbpPrint("%s descriptor table is empty.\n",
-                      Argv[0][0] == 'g' ? "Global" : "Local");
-            return TRUE;
-        }
-
-        KdbpPrint("%cDT Base: 0x%08x  Limit: 0x%04x\n",
-                  Argv[0][0] == 'g' ? 'G' : 'L', Reg.Base, Reg.Limit);
-        KdbpPrint("  Idx  Sel.    Type         Base        Limit       DPL  Attribs\n");
-
-        for (; (i + sizeof(SegDesc) - 1) <= Reg.Limit; i += 8)
-        {
-            if (!NT_SUCCESS(KdbpSafeReadMemory(SegDesc, (PVOID)((ULONG_PTR)Reg.Base + i), sizeof(SegDesc))))
-            {
-                KdbpPrint("Couldn't access memory at 0x%p!\n", (ULONG_PTR)Reg.Base + i);
-                return TRUE;
-            }
-
-            Dpl = ((SegDesc[1] >> 13) & 3);
-            Type = ((SegDesc[1] >> 8) & 0xf);
-
-            SegBase = SegDesc[0] >> 16;
-            SegBase |= (SegDesc[1] & 0xff) << 16;
-            SegBase |= SegDesc[1] & 0xff000000;
-            SegLimit = SegDesc[0] & 0x0000ffff;
-            SegLimit |= (SegDesc[1] >> 16) & 0xf;
-
-            if ((SegDesc[1] & (1 << 23)) != 0)
-            {
-                SegLimit *= 4096;
-                SegLimit += 4095;
-            }
-            else
-            {
-                SegLimit++;
-            }
-
-            if ((SegDesc[1] & (1 << 12)) == 0) /* System segment */
-            {
-                switch (Type)
-                {
-                    case  1: SegType = "TSS16(Avl)";    break;
-                    case  2: SegType = "LDT";           break;
-                    case  3: SegType = "TSS16(Busy)";   break;
-                    case  4: SegType = "CALLGATE16";    break;
-                    case  5: SegType = "TASKGATE";      break;
-                    case  6: SegType = "INTGATE16";     break;
-                    case  7: SegType = "TRAPGATE16";    break;
-                    case  9: SegType = "TSS32(Avl)";    break;
-                    case 11: SegType = "TSS32(Busy)";   break;
-                    case 12: SegType = "CALLGATE32";    break;
-                    case 14: SegType = "INTGATE32";     break;
-                    case 15: SegType = "TRAPGATE32";    break;
-                    default: SegType = "UNKNOWN";       break;
-                }
-
-                if (!(Type >= 1 && Type <= 3) &&
-                    Type != 9 && Type != 11)
-                {
-                    SegBase = 0;
-                    SegLimit = 0;
-                }
-            }
-            else if ((SegDesc[1] & (1 << 11)) == 0) /* Data segment */
-            {
-                if ((SegDesc[1] & (1 << 22)) != 0)
-                    SegType = "DATA32";
-                else
-                    SegType = "DATA16";
-            }
-            else /* Code segment */
-            {
-                if ((SegDesc[1] & (1 << 22)) != 0)
-                    SegType = "CODE32";
-                else
-                    SegType = "CODE16";
-            }
-
-            if ((SegDesc[1] & (1 << 15)) == 0) /* Not present */
-            {
-                KdbpPrint("  %03d  0x%04x  %-11s  [NP]        [NP]        %02d   NP\n",
-                          i / 8, i | Dpl | ul, SegType, Dpl);
-            }
-            else
-            {
-                KdbpPrint("  %03d  0x%04x  %-11s  0x%08x  0x%08x  %02d  ",
-                          i / 8, i | Dpl | ul, SegType, SegBase, SegLimit, Dpl);
-
-                if ((SegDesc[1] & (1 << 12)) == 0) /* System segment */
-                {
-                    /* FIXME: Display system segment */
-                }
-                else if ((SegDesc[1] & (1 << 11)) == 0) /* Data segment */
-                {
-                    if ((SegDesc[1] & (1 << 10)) != 0) /* Expand-down */
-                        KdbpPrint(" E");
-
-                    KdbpPrint((SegDesc[1] & (1 << 9)) ? " R/W" : " R");
-
-                    if ((SegDesc[1] & (1 << 8)) != 0)
-                        KdbpPrint(" A");
-                }
-                else /* Code segment */
-                {
-                    if ((SegDesc[1] & (1 << 10)) != 0) /* Conforming */
-                        KdbpPrint(" C");
-
-                    KdbpPrint((SegDesc[1] & (1 << 9)) ? " R/X" : " X");
-
-                    if ((SegDesc[1] & (1 << 8)) != 0)
-                        KdbpPrint(" A");
-                }
-
-                if ((SegDesc[1] & (1 << 20)) != 0)
-                    KdbpPrint(" AVL");
-
-                KdbpPrint("\n");
-            }
-        }
-    }
-
-    return TRUE;
-}
-
-/*!\brief Displays the KPCR
- */
-static BOOLEAN
-KdbpCmdPcr(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
-
-    KdbpPrint("Current PCR is at 0x%p.\n", Pcr);
-#ifdef _M_IX86
-    KdbpPrint("  Tib.ExceptionList:         0x%08x\n"
-              "  Tib.StackBase:             0x%08x\n"
-              "  Tib.StackLimit:            0x%08x\n"
-              "  Tib.SubSystemTib:          0x%08x\n"
-              "  Tib.FiberData/Version:     0x%08x\n"
-              "  Tib.ArbitraryUserPointer:  0x%08x\n"
-              "  Tib.Self:                  0x%08x\n"
-              "  SelfPcr:                   0x%08x\n"
-              "  PCRCB:                     0x%08x\n"
-              "  Irql:                      0x%02x\n"
-              "  IRR:                       0x%08x\n"
-              "  IrrActive:                 0x%08x\n"
-              "  IDR:                       0x%08x\n"
-              "  KdVersionBlock:            0x%08x\n"
-              "  IDT:                       0x%08x\n"
-              "  GDT:                       0x%08x\n"
-              "  TSS:                       0x%08x\n"
-              "  MajorVersion:              0x%04x\n"
-              "  MinorVersion:              0x%04x\n"
-              "  SetMember:                 0x%08x\n"
-              "  StallScaleFactor:          0x%08x\n"
-              "  Number:                    0x%02x\n"
-              "  L2CacheAssociativity:      0x%02x\n"
-              "  VdmAlert:                  0x%08x\n"
-              "  L2CacheSize:               0x%08x\n"
-              "  InterruptMode:             0x%08x\n"
-              , Pcr->NtTib.ExceptionList, Pcr->NtTib.StackBase, Pcr->NtTib.StackLimit,
-              Pcr->NtTib.SubSystemTib, Pcr->NtTib.FiberData, Pcr->NtTib.ArbitraryUserPointer,
-              Pcr->NtTib.Self
-              , Pcr->SelfPcr
-              , Pcr->Prcb, Pcr->Irql
-              , Pcr->IRR, Pcr->IrrActive , Pcr->IDR
-              , Pcr->KdVersionBlock
-              , Pcr->IDT, Pcr->GDT, Pcr->TSS
-              , Pcr->MajorVersion, Pcr->MinorVersion
-              , Pcr->SetMember
-              , Pcr->StallScaleFactor
-              , Pcr->Number
-              , Pcr->SecondLevelCacheAssociativity
-              , Pcr->VdmAlert
-              , Pcr->SecondLevelCacheSize
-              , Pcr->InterruptMode);
-#else
-    KdbpPrint("  GdtBase:                       0x%p\n", Pcr->GdtBase);
-    KdbpPrint("  TssBase:                       0x%p\n", Pcr->TssBase);
-    KdbpPrint("  UserRsp:                       0x%p\n", (PVOID)Pcr->UserRsp);
-    KdbpPrint("  Self:                          0x%p\n", Pcr->Self);
-    KdbpPrint("  CurrentPrcb:                   0x%p\n", Pcr->CurrentPrcb);
-    KdbpPrint("  LockArray:                     0x%p\n", Pcr->LockArray);
-    KdbpPrint("  Used_Self:                     0x%p\n", Pcr->Used_Self);
-    KdbpPrint("  IdtBase:                       0x%p\n", Pcr->IdtBase);
-    KdbpPrint("  Irql:                          %u\n", Pcr->Irql);
-    KdbpPrint("  SecondLevelCacheAssociativity: 0x%u\n", Pcr->SecondLevelCacheAssociativity);
-    KdbpPrint("  ObsoleteNumber:                %u\n", Pcr->ObsoleteNumber);
-    KdbpPrint("  MajorVersion:                  0x%x\n", Pcr->MajorVersion);
-    KdbpPrint("  MinorVersion:                  0x%x\n", Pcr->MinorVersion);
-    KdbpPrint("  StallScaleFactor:              0x%lx\n", Pcr->StallScaleFactor);
-    KdbpPrint("  SecondLevelCacheSize:          0x%lx\n", Pcr->SecondLevelCacheSize);
-    KdbpPrint("  KdVersionBlock:                0x%p\n", Pcr->KdVersionBlock);
-#endif
-
-    return TRUE;
-}
-
-#ifdef _M_IX86
-/*!\brief Displays the TSS
- */
-static BOOLEAN
-KdbpCmdTss(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    USHORT TssSelector;
-    PKTSS Tss = NULL;
-
-    if (Argc >= 2)
-    {
-        /*
-         * Specified TSS via its selector [selector] or descriptor address [*descaddr].
-         * Note that we ignore any other argument values.
-         */
-        PCHAR Param, pszNext;
-        ULONG ulValue;
-
-        Param = Argv[1];
-        if (Argv[1][0] == '*')
-            ++Param;
-
-        ulValue = strtoul(Param, &pszNext, 0);
-        if (pszNext && *pszNext)
-        {
-            KdbpPrint("Invalid TSS specification.\n");
-            return TRUE;
-        }
-
-        if (Argv[1][0] == '*')
-        {
-            /* Descriptor specified */
-            TssSelector = 0; // Unknown selector!
-            // TODO: Room for improvement: Find the TSS descriptor
-            // in the GDT so as to validate it.
-            Tss = (PKTSS)(ULONG_PTR)ulValue;
-            if (!Tss)
-            {
-                KdbpPrint("Invalid 32-bit TSS descriptor.\n");
-                return TRUE;
-            }
-        }
-        else
-        {
-            /* Selector specified, retrive the corresponding TSS */
-            TssSelector = (USHORT)ulValue;
-            Tss = KdbpRetrieveTss(TssSelector, NULL, NULL);
-            if (!Tss)
-            {
-                KdbpPrint("Invalid 32-bit TSS selector.\n");
-                return TRUE;
-            }
-        }
-    }
-
-    if (!Tss)
-    {
-        /* If no TSS was specified, use the current TSS descriptor */
-        TssSelector = Ke386GetTr();
-        Tss = KeGetPcr()->TSS;
-        // NOTE: If everything works OK, Tss is the current TSS corresponding to the TR selector.
-    }
-
-    KdbpPrint("%s TSS 0x%04x is at 0x%p.\n",
-              (Tss == KeGetPcr()->TSS) ? "Current" : "Specified", TssSelector, Tss);
-    KdbpPrint("  Backlink:  0x%04x\n"
-              "  Ss0:Esp0:  0x%04x:0x%08x\n"
-              // NOTE: Ss1:Esp1 and Ss2:Esp2: are in the NotUsed1 field.
-              "  CR3:       0x%08x\n"
-              "  EFlags:    0x%08x\n"
-              "  Eax:       0x%08x\n"
-              "  Ebx:       0x%08x\n"
-              "  Ecx:       0x%08x\n"
-              "  Edx:       0x%08x\n"
-              "  Esi:       0x%08x\n"
-              "  Edi:       0x%08x\n"
-              "  Eip:       0x%08x\n"
-              "  Esp:       0x%08x\n"
-              "  Ebp:       0x%08x\n"
-              "  Cs:        0x%04x\n"
-              "  Ss:        0x%04x\n"
-              "  Ds:        0x%04x\n"
-              "  Es:        0x%04x\n"
-              "  Fs:        0x%04x\n"
-              "  Gs:        0x%04x\n"
-              "  LDT:       0x%04x\n"
-              "  Flags:     0x%04x\n"
-              "  IoMapBase: 0x%04x\n",
-              Tss->Backlink, Tss->Ss0, Tss->Esp0, Tss->CR3, Tss->EFlags,
-              Tss->Eax, Tss->Ebx, Tss->Ecx, Tss->Edx, Tss->Esi, Tss->Edi,
-              Tss->Eip, Tss->Esp, Tss->Ebp,
-              Tss->Cs, Tss->Ss, Tss->Ds, Tss->Es, Tss->Fs, Tss->Gs,
-              Tss->LDT, Tss->Flags, Tss->IoMapBase);
-
-    return TRUE;
-}
-#endif // _M_IX86
 
 /*!\brief Bugchecks the system.
  */
