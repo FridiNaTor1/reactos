@@ -249,19 +249,7 @@ MmAccessFault(IN ULONG FaultCode,
     {
         /* This is an ARM3 fault */
         DPRINT("ARM3 fault %p\n", MemoryArea);
-        NTSTATUS Status = MmArmAccessFault(FaultCode, Address, Mode, TrapInformation);
-        if (!NT_SUCCESS(Status) &&
-            (Status != STATUS_STACK_OVERFLOW) &&
-            MiAddressToPxe(Address)->u.Hard.Valid == 1 &&
-            MiAddressToPpe(Address)->u.Hard.Valid == 1 &&
-            MiAddressToPde(Address)->u.Hard.Valid == 1 &&
-            MiAddressToPte(Address)->u.Long == 0x80)
-        {
-            // Failed to resolve a demand paging fault.
-            __debugbreak();
-            Status = MmArmAccessFault(FaultCode, Address, Mode, TrapInformation);
-        }
-        return Status;
+        return MmArmAccessFault(FaultCode, Address, Mode, TrapInformation);
     }
 
     /* Keep same old ReactOS Behaviour */
