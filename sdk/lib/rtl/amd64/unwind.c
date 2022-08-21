@@ -846,7 +846,7 @@ RtlpUnwindInternal(
         }
 
         /* We have successfully unwound a frame. Copy the unwind context back. */
-        *ContextRecord = UnwindContext;
+         *ContextRecord = UnwindContext;
     }
 
     if (ExceptionRecord->ExceptionCode != STATUS_UNWIND_CONSOLIDATE)
@@ -889,6 +889,13 @@ RtlUnwindEx(
         LocalExceptionRecord.ExceptionRecord = NULL;
         LocalExceptionRecord.NumberParameters = 0;
         ExceptionRecord = &LocalExceptionRecord;
+    }
+
+    /* Set unwind flags */
+    ExceptionRecord->ExceptionFlags = EXCEPTION_UNWINDING;
+    if (TargetFrame == NULL)
+    {
+        ExceptionRecord->ExceptionFlags |= EXCEPTION_EXIT_UNWIND;
     }
 
     /* Call the internal function */

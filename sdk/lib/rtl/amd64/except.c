@@ -19,7 +19,7 @@ RtlRaiseException(IN PEXCEPTION_RECORD ExceptionRecord)
 {
     CONTEXT Context;
     NTSTATUS Status = STATUS_INVALID_DISPOSITION;
-
+    //__debugbreak();
     /* Capture the current context */
     RtlCaptureContext(&Context);
 
