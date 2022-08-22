@@ -15,25 +15,16 @@ START_TEST(NtUserGetKeyboardLayoutName)
     FN_NtUserGetKeyboardLayoutName fn = (FN_NtUserGetKeyboardLayoutName)NtUserGetKeyboardLayoutName;
     UNICODE_STRING ustr;
     WCHAR szBuff[MAX_PATH];
-    BOOL bHung, ret;
+    PVOID pvAllocation;
+    BOOL ret;
 
     /* Try NULL */
     ok_int(fn(NULL), FALSE);
 
     /* Try szBuff */
-    ret = bHung = FALSE;
     RtlZeroMemory(szBuff, sizeof(szBuff));
-    _SEH2_TRY
-    {
-        ret = fn(szBuff);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        bHung = TRUE;
-    }
-    _SEH2_END;
+    ret = fn(szBuff);
 
-    ok_int(bHung, FALSE);
     //ok_int(ret, FALSE); // XP:TRUE, 2k3:FALSE
     ok(szBuff[0] == 0, "szBuff[0] was %d\n", szBuff[0]);
 
@@ -42,19 +33,44 @@ START_TEST(NtUserGetKeyboardLayoutName)
     ustr.Buffer = szBuff;
     ustr.Length = 0;
     ustr.MaximumLength = RTL_NUMBER_OF(szBuff) * sizeof(WCHAR);
-    ret = bHung = FALSE;
-    _SEH2_TRY
-    {
-        ret = fn(&ustr);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        bHung = TRUE;
-    }
-    _SEH2_END;
+    ret = fn(&ustr);
 
-    ok_int(bHung, FALSE);
     ok_int(ret, TRUE);
+    ok_int(ustr.Length, 0);
     ok(szBuff[0] != 0, "szBuff[0] was %d\n", szBuff[0]);
     trace("szBuff: %S\n", szBuff);
+
+    /* Try invalid buffer */
+    ustr.Buffer = (PWCHAR)(LONG_PTR)-1;
+    ustr.Length = 0;
+    ustr.MaximumLength = RTL_NUMBER_OF(szBuff) * sizeof(WCHAR);
+    ret = fn(&ustr);
+    ok_int(ret, FALSE);
+    ok_int(GetLastError(), ERROR_NOACCESS);
+
+    /* Try too small buffer */
+    RtlZeroMemory(szBuff, sizeof(szBuff));
+    ustr.Buffer = szBuff;
+    ustr.Length = 0;
+    ustr.MaximumLength = 2;
+    ret = fn(&ustr);
+    ok_int(ret, FALSE);
+    ok(szBuff[0] == 0, "szBuff[0] was %d\n", szBuff[0]);
+    ok_int(GetLastError(), ERROR_INVALID_PARAMETER);
+
+    pvAllocation = VirtualAlloc(NULL, PAGE_SIZE, MEM_COMMIT, PAGE_READWRITE);
+    ok(pvAllocation != NULL, "VirtualAlloc failed with error %d\n", GetLastError());
+    if (pvAllocation != NULL)
+    {
+        /* Try invalid buffer */
+        ustr.Buffer = (PWCHAR)pvAllocation;
+        ustr.Length = 0;
+        ustr.MaximumLength = PAGE_SIZE + 1;
+        ret = fn(&ustr);
+        ok_int(ret, FALSE);
+        ok(ustr.Buffer[0] == 0, "ustr.Buffer[0] was %d\n", szBuff[0]);
+        ok_int(GetLastError(), ERROR_NOACCESS);
+        VirtualFree(pvAllocation, 0, MEM_RELEASE);
+    }
+
 }
