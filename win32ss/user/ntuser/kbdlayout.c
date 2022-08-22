@@ -956,33 +956,21 @@ NtUserGetKeyboardLayoutName(
 
     _SEH2_TRY
     {
-        ProbeForWriteUnicodeString(pustrName);
+        /* Probe and capture the UNICODE_STRING */
+        ProbeForRead(pustrName, sizeof(*pustrName), 1);
         ustrNameSafe = *pustrName;
 
+        /* Check if the buffer is large enough */
+        if (ustrNameSafe.MaximumLength < KL_NAMELENGTH * sizeof(WCHAR))
+        {
+            EngSetLastError(ERROR_INVALID_PARAMETER);
+            goto cleanup;
+        }
+
+        /* Probe the buffer and copy the name */
         ProbeForWrite(ustrNameSafe.Buffer, ustrNameSafe.MaximumLength, 1);
-
-        if (IS_IME_HKL(pKl->hkl))
-        {
-            Status = RtlIntegerToUnicodeString((ULONG)(ULONG_PTR)pKl->hkl, 16, &ustrNameSafe);
-        }
-        else
-        {
-            if (ustrNameSafe.MaximumLength < KL_NAMELENGTH * sizeof(WCHAR))
-            {
-                EngSetLastError(ERROR_INVALID_PARAMETER);
-                goto cleanup;
-            }
-
-            /* FIXME: Do not use awchKF */
-            ustrNameSafe.Length = 0;
-            Status = RtlAppendUnicodeToString(&ustrNameSafe, pKl->spkf->awchKF);
-        }
-
-        if (NT_SUCCESS(Status))
-        {
-            *pustrName = ustrNameSafe;
-            bRet = TRUE;
-        }
+        wcscpy(ustrNameSafe.Buffer, pKl->spkf->awchKF);
+        bRet = TRUE;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

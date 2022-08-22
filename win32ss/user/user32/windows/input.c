@@ -714,8 +714,8 @@ IntLoadKeyboardLayout(
     ZeroMemory(&ustrKbdName, sizeof(ustrKbdName));
     RtlInitUnicodeString(&ustrKLID, pwszKLID);
     hNewKL = NtUserLoadKeyboardLayoutEx(NULL, 0, &ustrKbdName,
-                                        NULL, &ustrKLID,
-                                        dwhkl, Flags);
+                                      NULL, &ustrKLID,
+                                      dwhkl, Flags);
     CliImmInitializeHotKeys(SETIMEHOTKEY_ADD, hNewKL);
     return hNewKL;
 }
