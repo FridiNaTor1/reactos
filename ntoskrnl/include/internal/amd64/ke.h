@@ -363,7 +363,21 @@ KiUserTrap(IN PKTRAP_FRAME TrapFrame)
     return !!(TrapFrame->SegCs & MODE_MASK);
 }
 
-#define Ki386PerfEnd()
+//
+// PERF Code
+//
+FORCEINLINE
+VOID
+Ki386PerfEnd(VOID)
+{
+    extern ULONGLONG BootCyclesEnd, BootCycles;
+    BootCyclesEnd = __rdtsc();
+    DbgPrint("Boot took %I64u cycles!\n", BootCyclesEnd - BootCycles);
+    DbgPrint("Interrupts: %u System Calls: %u Context Switches: %u\n",
+             KeGetCurrentPrcb()->InterruptCount,
+             KeGetCurrentPrcb()->KeSystemCalls,
+             KeGetContextSwitches(KeGetCurrentPrcb()));
+}
 
 struct _KPCR;
 
